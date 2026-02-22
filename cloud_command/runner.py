@@ -7,6 +7,7 @@ import argparse
 import uvicorn
 
 # Project libraries
+from cloud_command.app import app
 from cloud_command.constants import VERSION
 
 
@@ -20,8 +21,6 @@ def main():
     uvicorn_arguments.add_argument("--port", default=8080, help="Uvicorn server Port, default: 8080")
 
     args = parser.parse_args()
-
-    from cloud_command.app import app
 
     uvicorn.run(app=app, host=args.host, port=args.port)
 

@@ -1,4 +1,4 @@
-"""Defines the cluster router"""
+"""Defines the agent router."""
 
 # Third-party libraries
 from fastapi import APIRouter
@@ -6,29 +6,28 @@ from pydantic import BaseModel, Field
 
 # Project libraries
 from cloud_command.agents.agent_manager import agent_manager
-from cloud_command.constants import AGENT_STATES, AGENT_TYPE
 
 cluster_router = APIRouter()
 
 
 class AgentModel(BaseModel):
     name: str = Field(examples=["agent-1"])
-    type: str = Field(examples=[*AGENT_TYPE])
-    state: str = Field(examples=[*AGENT_STATES])
+    state: str = Field(examples=["pending", "running"])
+    public_ip_address: str | None = Field(default=None, examples=["127.0.0.1"])
+    config: dict | None = Field(default=None, examples=[{"instance_type": "t4g.nano", "region": "us-east-2"}])
 
 
 @cluster_router.get("/agent/list", tags=["Agents"])
 async def get_cluster_list() -> list[AgentModel]:
-    out_list = []
-    for agent in agent_manager.agent_list:
-        out_list.append(
-            AgentModel(
-                name=agent.name,
-                type=agent.type.name,
-                state=agent.state.name,
-            )
+    return [
+        AgentModel(
+            name=agent.name,
+            state=agent.instance_state,
+            ip_address=str(agent.public_ip_address) if agent.public_ip_address else None,
+            config=agent.config.to_dict(),
         )
-    return out_list
+        for agent in agent_manager.agent_list
+    ]
 
 
 class CreateEC2AgentModel(BaseModel):
@@ -38,7 +37,7 @@ class CreateEC2AgentModel(BaseModel):
 
 
 @cluster_router.post("/agent/create/ec2", tags=["Agents"])
-async def create_ec2_agent(create_ec2_model: CreateEC2AgentModel):
+async def create_ec2_agent(create_ec2_model: CreateEC2AgentModel) -> None:
     await agent_manager.create_ec2_agent(
         name=create_ec2_model.name,
         instance_type=create_ec2_model.instance_type,
@@ -47,5 +46,5 @@ async def create_ec2_agent(create_ec2_model: CreateEC2AgentModel):
 
 
 @cluster_router.delete("/agent/delete", tags=["Agents"])
-async def delete_agent(name: str):
+async def delete_agent(name: str) -> None:
     await agent_manager.delete_agent(name=name)

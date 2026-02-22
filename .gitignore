@@ -6,6 +6,3 @@
 build/
 __pycache__/
 *.egg-info
-
-# Project
-agents/
