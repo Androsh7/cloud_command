@@ -14,6 +14,7 @@ dependencies = [
     "fabric",
     "fastapi",
     "loguru",
+    "stdiomask",
     "uvicorn",
 ]
 
