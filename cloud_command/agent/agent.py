@@ -11,7 +11,7 @@ from typing import Any
 # Third-party libraries
 import boto3
 from attrs import define, field, validators
-from fabric import Connection, connection
+from fabric import Connection
 from loguru import logger
 
 # Project libraries
@@ -209,11 +209,13 @@ class Agent:
     def get_state(self) -> str:
         """Returns the EC2 state"""
         boto3_client = boto3.client("ec2", region_name=self.config.region)
-        instance_dict = boto3_client.describe_instances(InstanceIds=[self.config.instance_id])["Reservations"][0]["Instances"][
-            0
-        ]
+        instance_dict = boto3_client.describe_instances(InstanceIds=[self.config.instance_id])["Reservations"][0][
+            "Instances"
+        ][0]
         self.instance_state = instance_dict["State"]["Name"]
-        self.public_ip_address = IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
+        self.public_ip_address = (
+            IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
+        )
         return self.instance_state
 
     def run_command(self, command: str, sudo: bool = False) -> tuple[str, str, int]:

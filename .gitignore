@@ -6,3 +6,7 @@
 build/
 __pycache__/
 *.egg-info
+
+# Project files
+agents/
+*.sha256
