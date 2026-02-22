@@ -11,6 +11,7 @@ from cloud_command.agent.agent_manager import agent_manager
 # Project libraries
 from cloud_command.constants import VERSION
 from cloud_command.router.agent import cluster_router
+from cloud_command.router.command import command_router
 
 
 @asynccontextmanager
@@ -27,3 +28,4 @@ app = FastAPI(
     title="CloudCommand", docs_url="/api/docs", openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan
 )
 app.include_router(cluster_router, prefix="/api")
+app.include_router(command_router, prefix="/api")

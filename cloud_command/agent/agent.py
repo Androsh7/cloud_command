@@ -11,7 +11,7 @@ from typing import Any
 # Third-party libraries
 import boto3
 from attrs import define, field, validators
-from fabric import Connection
+from fabric import Connection, connection
 from loguru import logger
 
 # Project libraries
@@ -205,3 +205,24 @@ class Agent:
                 "key_filename": str(self.config.key_pair.private_key),
             },
         )
+
+    def get_state(self) -> str:
+        """Returns the EC2 state"""
+        boto3_client = boto3.client("ec2", region_name=self.config.region)
+        instance_dict = boto3_client.describe_instances(InstanceIds=[self.config.instance_id])["Reservations"][0]["Instances"][
+            0
+        ]
+        self.instance_state = instance_dict["State"]["Name"]
+        self.public_ip_address = IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
+        return self.instance_state
+
+    def run_command(self, command: str, sudo: bool = False) -> tuple[str, str, int]:
+        """Run a command on the EC2 instance and returns stdout, stderr, and exit code"""
+        if self.instance_state != "running" and self.get_state() != "running":
+            raise RuntimeError(f"Agent {self.name} is not running. Current state: {self.get_state()}")
+        with self.connection() as conn:
+            if sudo:
+                result = conn.sudo(command, hide=True, warn=True)
+            else:
+                result = conn.run(command, hide=True, warn=True)
+            return result.stdout, result.stderr, result.return_code

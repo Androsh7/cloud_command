@@ -1,6 +1,7 @@
 """Defines the agent router."""
 
 # Third-party libraries
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -67,20 +68,25 @@ async def get_cluster_list() -> list[AgentModel]:
 
 
 class CreateEC2AgentModel(BaseModel):
-    name: str = Field(examples=["ec2-1"])
     region: str = Field(examples=["us-east-2"])
     instance_type: str = Field(examples=["t4g.nano"])
 
 
-@cluster_router.post("/agent/create", tags=["Agents"])
-async def create_ec2_agent(create_ec2_model: CreateEC2AgentModel) -> None:
+@cluster_router.post("/agent/{name}/create", tags=["Agents"])
+async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel) -> None:
     await agent_manager.create_ec2_agent(
-        name=create_ec2_model.name,
+        name=name,
         instance_type=create_ec2_model.instance_type,
         region=create_ec2_model.region,
     )
 
 
-@cluster_router.delete("/agent/delete", tags=["Agents"])
+@cluster_router.delete("/agent/{name}/delete", tags=["Agents"])
 async def delete_agent(name: str) -> None:
     await agent_manager.delete_agent(name=name)
+
+
+@cluster_router.get("/agent/{name}/state", tags=["Agents"])
+async def get_agent_state(name: str) -> str:
+    agent = agent_manager.get_agent(name=name)
+    return await asyncio.to_thread(agent.get_state)
