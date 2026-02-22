@@ -26,7 +26,6 @@ def update_api_password() -> None:
         sys.exit(1)
 
     write_password_hash(password)
-    print("API password saved.")
 
 
 def main():

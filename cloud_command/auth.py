@@ -14,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Project libraries
 from cloud_command.constants import PARENT_DIRECTORY
 
-PASSWORD_HASH_FILE: Path = PARENT_DIRECTORY / "api_password.sha256"
+PASSWORD_HASH_FILE: Path = PARENT_DIRECTORY / "password_hash"
 bearer_scheme = HTTPBearer(auto_error=False)
 ACTIVE_TOKENS: set[str] = set()
 SALT_BYTES = 16
@@ -57,10 +57,6 @@ def verify_password(password: str) -> bool:
             return False
         given_hash = _hash_password_with_salt(password, salt)
         return hmac.compare_digest(given_hash, stored_hash)
-
-    # Backward compatibility for existing unsalted password hash files.
-    given_hash = _hash_password(password)
-    return hmac.compare_digest(given_hash, expected_hash)
 
 
 def create_auth_token() -> str:
