@@ -9,4 +9,4 @@ __pycache__/
 
 # Project files
 agents/
-*.sha256
+password_hash
