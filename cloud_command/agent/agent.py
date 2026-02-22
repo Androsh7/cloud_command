@@ -15,7 +15,7 @@ from fabric import Connection
 from loguru import logger
 
 # Project libraries
-from cloud_command.agents.aws import (
+from cloud_command.agent.aws import (
     create_ec2,
     create_ec2_key_pair,
     create_security_group,
@@ -23,7 +23,7 @@ from cloud_command.agents.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
-from cloud_command.agents.utils import SshKeyPair, create_ssh_key_pair
+from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
 
 
@@ -102,7 +102,7 @@ class Agent:
 
     @classmethod
     def from_config(cls, config_path: Path) -> "Agent":
-        with open(file=config_path, mode="r", encoding="utf-8") as config_file:
+        with open(file=config_path, encoding="utf-8") as config_file:
             payload = json.load(config_file)
 
         agent = cls(

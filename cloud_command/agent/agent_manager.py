@@ -9,7 +9,7 @@ from attrs import define, field
 from loguru import logger
 
 # Project libraries
-from cloud_command.agents.agent import Agent, Ec2Config
+from cloud_command.agent.agent import Agent, Ec2Config
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY
 
 

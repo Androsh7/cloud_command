@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 # Third-party libraries
 from fastapi import FastAPI
 
-from cloud_command.agents.agent_manager import agent_manager
+from cloud_command.agent.agent_manager import agent_manager
 
 # Project libraries
 from cloud_command.constants import VERSION
@@ -23,5 +23,7 @@ async def lifespan(app: FastAPI):
     # Shutdown actions
 
 
-app = FastAPI(title="CloudCommand", docs_url="/api/docs", version=VERSION, lifespan=lifespan)
+app = FastAPI(
+    title="CloudCommand", docs_url="/api/docs", openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan
+)
 app.include_router(cluster_router, prefix="/api")
