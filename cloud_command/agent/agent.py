@@ -23,6 +23,7 @@ from cloud_command.agent.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
+from cloud_command.agent.command_model import AgentLocationModel, AgentStatusModel
 from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
 
@@ -192,6 +193,8 @@ class Agent:
 
     def connection(self) -> Connection:
         """Create a fabric connection object."""
+        if self.instance_state != "running" and self.get_state() != "running":
+            raise RuntimeError(f"Agent {self.name} is not running. Current state: {self.get_state()}")
         if not self.public_ip_address:
             raise RuntimeError(f"Agent {self.name} does not have a public IP address yet")
         if not self.config.key_pair:
@@ -220,11 +223,25 @@ class Agent:
 
     def run_command(self, command: str, sudo: bool = False) -> tuple[str, str, int]:
         """Run a command on the EC2 instance and returns stdout, stderr, and exit code"""
-        if self.instance_state != "running" and self.get_state() != "running":
-            raise RuntimeError(f"Agent {self.name} is not running. Current state: {self.get_state()}")
         with self.connection() as conn:
             if sudo:
                 result = conn.sudo(command, hide=True, warn=True)
             else:
                 result = conn.run(command, hide=True, warn=True)
             return result.stdout, result.stderr, result.return_code
+
+    def get_statistics(self):
+        """Get the current status of the agent."""
+        with self.connection() as conn:
+            uptime = conn.run("uptime", hide=True).stdout.strip()
+            disk_usage = conn.run("df -h", hide=True).stdout.strip()
+            ram_usage = conn.run("free -h", hide=True).stdout.strip()
+            cpu_usage = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
+            location = AgentLocationModel.from_ipinfo_dict(json.loads(conn.run("curl -s ipinfo.io", hide=True).stdout))
+            return AgentStatusModel(
+                status=uptime,
+                location=location,
+                disk_usage=disk_usage,
+                ram_usage=ram_usage,
+                cpu_usage=cpu_usage,
+            )

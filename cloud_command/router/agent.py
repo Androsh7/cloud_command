@@ -4,14 +4,13 @@
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.auth import require_api_token
 
-cluster_router = APIRouter(dependencies=[Depends(require_api_token)])
+cluster_router = APIRouter()
 
 
 class SshKeyPairModel(BaseModel):
