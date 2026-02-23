@@ -2,10 +2,12 @@
 
 # Standard libraries
 import json
+import mimetypes
 import re
 import shutil
 import sys
 from http import HTTPStatus
+from pathlib import PurePosixPath
 from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any
@@ -306,3 +308,31 @@ class Agent:
             file_size_bytes=file.size or 0,
             mime_type=file.content_type or "application/octet-stream",
         )
+
+    def download_file(self, source_path: str) -> tuple[bytes, str, str]:
+        """Download a file from the EC2 instance and return bytes, filename, and mime type."""
+        if not source_path.startswith("/"):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=f"Source path must be absolute. Received: {source_path}",
+            )
+        if source_path.endswith("/"):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=f"Source path must reference a file. Received: {source_path}",
+            )
+
+        filename = PurePosixPath(source_path).name
+        mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+        with self.connection() as conn:
+            try:
+                with conn.sftp() as sftp, sftp.open(source_path, "rb") as remote_file:
+                    payload = remote_file.read()
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=HTTPStatus.BAD_REQUEST,
+                    detail=f"Download failed for '{source_path}': {exc}",
+                ) from exc
+
+        return payload, filename, mime_type
