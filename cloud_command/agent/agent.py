@@ -1,6 +1,7 @@
 """Defines the agent class."""
 
 # Standard libraries
+import re
 import json
 import shutil
 import sys
@@ -245,13 +246,33 @@ class Agent:
     def get_statistics(self):
         """Get the current status of the agent"""
         with self.connection() as conn:
-            uptime = conn.run("uptime", hide=True).stdout.strip()
-            disk_usage = conn.run("df -h", hide=True).stdout.strip()
-            ram_usage = conn.run("free -h", hide=True).stdout.strip()
-            cpu_usage = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
+            uptime_seconds = float(conn.run("cat /proc/uptime", hide=True).stdout.strip().split(" ")[0])
+            
+            # Get disk usage
+            disk_usage_output = conn.run("df / | tail -n 1", hide=True).stdout.strip()
+            disk_usage_matches = re.search(r'(\d+) +(\d+) +(\d+) +(\d+)%', disk_usage_output)
+            used_disk = int(disk_usage_matches.group(2))
+            total_disk = int(disk_usage_matches.group(1))
+            disk_usage = f"{used_disk / 1024 / 1024:.2f}GB/{total_disk / 1024 / 1024:.2f}GB"
+            
+            # Get RAM usage
+            ram_usage_output = conn.run("cat /proc/meminfo", hide=True).stdout.strip()
+            ram_usage_matches = re.search(r'MemTotal: +(\d+) \w+[\n.]+MemFree: +(\d+) \w+', ram_usage_output)
+            ram_total = int(ram_usage_matches.group(1))
+            ram_free = int(ram_usage_matches.group(2))
+            ram_usage = f"{ram_free / 1024 / 1024:.2f}GB/{ram_total / 1024 / 1024:.2f}GB"
+
+            # Get CPU usage
+            cpu_usage_output = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
+            logger.debug(f"CPU usage output: {cpu_usage_output}")
+            cpu_usage_matches = re.search(r'(\d+(\.\d+)?) id', cpu_usage_output)
+            cpu_usage = f"{100 - float(cpu_usage_matches.group(1)):.2f}%"
+            
+            # Get location info
             location = AgentLocationModel.from_ipinfo_dict(json.loads(conn.run("curl -s ipinfo.io", hide=True).stdout))
+
             return AgentStatusModel(
-                status=uptime,
+                uptime_seconds=uptime_seconds,
                 location=location,
                 disk_usage=disk_usage,
                 ram_usage=ram_usage,

@@ -47,16 +47,16 @@ class AgentLocationModel(BaseModel):
 
 
 class AgentStatusModel(BaseModel):
-    status: str = Field(examples=["Agent is up 00:00:00 up 1 day,  2:34,  1 user,  load average: 0.00, 0.01, 0.05"])
+    uptime_seconds: float = Field(examples=[586.4])
     location: AgentLocationModel
     disk_usage: str = Field(
         examples=[
-            "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        30G  1.5G   28G   5% /\ndevtmpfs        7.8G     0  7.8G   0% /dev\ntmpfs           7.8G     0  7.8G   0% /dev/shm\ntmpfs           7.8G   17M  7.8G   1% /run\ntmpfs           7.8G     0  7.8G   0% /sys/fs/cgroup"
+            "1.1GB/10.11GB"
         ]
     )
     ram_usage: str = Field(
         examples=[
-            "              total        used        free      shared  buff/cache   available\nMem:           7.8G        1.2G        5.0G         17M        1.6G        6.3G\nSwap:          2.0G          0B        2.0G"
+            "0.5GB/4.0GB"
         ]
     )
-    cpu_usage: str = Field(examples=["%Cpu(s):  1.0 us,  0.5 sy,  0.0 ni, 98.0 id,  0.5 wa,  0.0 hi,  0.0 si,  0.0 st"])
+    cpu_usage: str = Field(examples=["15%"])
