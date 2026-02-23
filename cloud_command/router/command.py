@@ -25,7 +25,7 @@ async def run_command(name: str, command_model: CommandModel) -> CommandResultMo
     return CommandResultModel(stdout=stdout, stderr=stderr, exit_code=exit_code)
 
 
-@command_router.post("/agent/{name}/command/statistics", tags=["Commands"])
+@command_router.get("/agent/{name}/command/statistics", tags=["Commands"])
 async def get_command_status(name: str) -> AgentStatusModel:
     agent = agent_manager.get_agent(name=name)
     return await asyncio.to_thread(agent.get_statistics)

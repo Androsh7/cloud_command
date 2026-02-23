@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class CommandModel(BaseModel):
     command: str = Field(examples=["ls -la"])
+    executable: str = Field(default="/bin/bash", examples=["/bin/bash", "/usr/bin/python3"])
     sudo: bool = Field(default=False, examples=[True, False])
 
 

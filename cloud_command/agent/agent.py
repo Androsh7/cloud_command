@@ -7,9 +7,8 @@ import re
 import shutil
 import sys
 from http import HTTPStatus
-from pathlib import PurePosixPath
 from ipaddress import IPv4Address
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 # Third-party libraries
@@ -30,7 +29,7 @@ from cloud_command.agent.aws import (
 )
 from cloud_command.agent.command_model import AgentLocationModel, AgentStatusModel
 from cloud_command.agent.file_model import FileUploadModel
-from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair
+from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair, encode_script
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
 
 
@@ -236,14 +235,11 @@ class Agent:
         )
         return self.instance_state
 
-    def run_command(self, command: str, sudo: bool = False) -> tuple[str, str, int]:
+    def run_command(self, command: str, sudo: bool = False, executable: str = "/bin/bash") -> tuple[str, str, int]:
         """Run a command on the EC2 instance and returns stdout, stderr, and exit code"""
         with self.connection() as conn:
-            if sudo:
-                result = conn.sudo(command, hide=True, warn=True)
-            else:
-                result = conn.run(command, hide=True, warn=True)
-            return result.stdout, result.stderr, result.return_code
+            result = conn.run(encode_script(command, executable=executable, sudo=sudo), hide=True, warn=True)
+            return result.stdout.strip(), result.stderr.strip(), result.return_code
 
     def get_statistics(self):
         """Get the current status of the agent"""

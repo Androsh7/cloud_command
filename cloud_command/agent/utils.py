@@ -1,6 +1,7 @@
 """Utility functions"""
 
 # Standard libraries
+import base64
 from pathlib import Path
 
 # Third-party libraries
@@ -51,3 +52,7 @@ def create_ssh_key_pair(output_dir: Path) -> SshKeyPair:
         public_key_file.write(public_key)
 
     return SshKeyPair(private_key=private_key_path, public_key=public_key_path)
+
+
+def encode_script(script: str, executable: str = "/bin/bash", sudo: bool = False) -> str:
+    return f'echo "{base64.b64encode(script.encode("utf-8")).decode("utf-8")}" | base64 -d | {"sudo " if sudo else ""}{executable}'
