@@ -23,11 +23,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} errorElement={<InternalError />} />
         <Route
-          path="/agents"
-          element={<Home />}
-          errorElement={<InternalError />}
-        />
-        <Route
           path="/create_agent"
           element={<CreateAgent />}
           errorElement={<InternalError />}
