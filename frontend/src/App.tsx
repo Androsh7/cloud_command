@@ -1,35 +1,58 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Route, Routes } from "react-router-dom";
+import Home from "./pages/Home";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import "bootswatch/dist/slate/bootstrap.min.css";
+import Navbar from "./components/Navbar";
+import CreateAgent from "./pages/CreateAgent";
+import DeleteAgent from "./pages/DeleteAgent";
+import InteractiveShell from "./pages/InteractiveShell";
+import Login from "./pages/Login";
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+function NotFound() {
+  return <div className="container mt-4">Page not found</div>;
 }
 
-export default App
+function InternalError() {
+  return <div className="container mt-4">Internal Server Error</div>;
+}
+
+export default function App() {
+  return (
+    <>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} errorElement={<InternalError />} />
+        <Route
+          path="/agents"
+          element={<Home />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="/create_agent"
+          element={<CreateAgent />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="/delete_agent"
+          element={<DeleteAgent />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="/interactive_shell"
+          element={<InteractiveShell />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="/login"
+          element={<Login />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="*"
+          element={<NotFound />}
+          errorElement={<InternalError />}
+        />
+      </Routes>
+    </>
+  );
+}
