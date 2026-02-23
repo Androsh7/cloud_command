@@ -49,14 +49,6 @@ class AgentLocationModel(BaseModel):
 class AgentStatusModel(BaseModel):
     uptime_seconds: float = Field(examples=[586.4])
     location: AgentLocationModel
-    disk_usage: str = Field(
-        examples=[
-            "1.1GB/10.11GB"
-        ]
-    )
-    ram_usage: str = Field(
-        examples=[
-            "0.5GB/4.0GB"
-        ]
-    )
+    disk_usage: str = Field(examples=["1.1GB/10.11GB"])
+    ram_usage: str = Field(examples=["0.5GB/4.0GB"])
     cpu_usage: str = Field(examples=["15%"])

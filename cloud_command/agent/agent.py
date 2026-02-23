@@ -1,12 +1,11 @@
 """Defines the agent class."""
 
 # Standard libraries
-import re
 import json
+import re
 import shutil
 import sys
 from http import HTTPStatus
-from http.client import HTTPException
 from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any
@@ -15,7 +14,7 @@ from typing import Any
 import boto3
 from attrs import define, field, validators
 from fabric import Connection
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from loguru import logger
 
 # Project libraries
@@ -28,6 +27,7 @@ from cloud_command.agent.aws import (
     get_vpc_subnet_id,
 )
 from cloud_command.agent.command_model import AgentLocationModel, AgentStatusModel
+from cloud_command.agent.file_model import FileUploadModel
 from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
 
@@ -247,17 +247,17 @@ class Agent:
         """Get the current status of the agent"""
         with self.connection() as conn:
             uptime_seconds = float(conn.run("cat /proc/uptime", hide=True).stdout.strip().split(" ")[0])
-            
+
             # Get disk usage
             disk_usage_output = conn.run("df / | tail -n 1", hide=True).stdout.strip()
-            disk_usage_matches = re.search(r'(\d+) +(\d+) +(\d+) +(\d+)%', disk_usage_output)
+            disk_usage_matches = re.search(r"(\d+) +(\d+) +(\d+) +(\d+)%", disk_usage_output)
             used_disk = int(disk_usage_matches.group(2))
             total_disk = int(disk_usage_matches.group(1))
             disk_usage = f"{used_disk / 1024 / 1024:.2f}GB/{total_disk / 1024 / 1024:.2f}GB"
-            
+
             # Get RAM usage
             ram_usage_output = conn.run("cat /proc/meminfo", hide=True).stdout.strip()
-            ram_usage_matches = re.search(r'MemTotal: +(\d+) \w+[\n.]+MemFree: +(\d+) \w+', ram_usage_output)
+            ram_usage_matches = re.search(r"MemTotal: +(\d+) \w+[\n.]+MemFree: +(\d+) \w+", ram_usage_output)
             ram_total = int(ram_usage_matches.group(1))
             ram_free = int(ram_usage_matches.group(2))
             ram_usage = f"{ram_free / 1024 / 1024:.2f}GB/{ram_total / 1024 / 1024:.2f}GB"
@@ -265,9 +265,9 @@ class Agent:
             # Get CPU usage
             cpu_usage_output = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
             logger.debug(f"CPU usage output: {cpu_usage_output}")
-            cpu_usage_matches = re.search(r'(\d+(\.\d+)?) id', cpu_usage_output)
+            cpu_usage_matches = re.search(r"(\d+(\.\d+)?) id", cpu_usage_output)
             cpu_usage = f"{100 - float(cpu_usage_matches.group(1)):.2f}%"
-            
+
             # Get location info
             location = AgentLocationModel.from_ipinfo_dict(json.loads(conn.run("curl -s ipinfo.io", hide=True).stdout))
 
@@ -278,3 +278,31 @@ class Agent:
                 ram_usage=ram_usage,
                 cpu_usage=cpu_usage,
             )
+
+    def upload_file(self, file: UploadFile, destination_path: str) -> FileUploadModel:
+        """Upload a file to the EC2 instance."""
+        file.file.seek(0)
+
+        # Fix upload path
+        if not destination_path.startswith("/"):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=f"Destination path must be absolute. Received: {destination_path}",
+            )
+        if destination_path.endswith("/"):
+            destination_path = f"{destination_path.rstrip('/')}/{file.filename}"
+
+        with self.connection() as conn:
+            try:
+                conn.put(file.file, destination_path)
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=HTTPStatus.BAD_REQUEST,
+                    detail=f"Upload failed for '{destination_path}': {exc}",
+                ) from exc
+
+        return FileUploadModel(
+            destination_path=destination_path,
+            file_size_bytes=file.size or 0,
+            mime_type=file.content_type or "application/octet-stream",
+        )

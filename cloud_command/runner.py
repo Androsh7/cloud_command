@@ -18,14 +18,22 @@ def main():
 
     # Add uvicorn arguments
     uvicorn_arguments = parser.add_argument_group("uvicorn options")
-    uvicorn_arguments.add_argument("--host", type=str, default="127.0.0.1", help="Uvicorn server IP, default: 127.0.0.1")
+    uvicorn_arguments.add_argument(
+        "--host", type=str, default="127.0.0.1", help="Uvicorn server IP, default: 127.0.0.1"
+    )
     uvicorn_arguments.add_argument("--port", type=int, default=8080, help="Uvicorn server Port, default: 8080")
-    uvicorn_arguments.add_argument("--private-key-path", type=Path, default=None, help="Path to private key for SSH access to agents")
-    uvicorn_arguments.add_argument("--public-key-path", type=Path, default=None, help="Path to public key for SSH access to agents")
+    uvicorn_arguments.add_argument(
+        "--private-key-path", type=Path, default=None, help="Path to private key for SSH access to agents"
+    )
+    uvicorn_arguments.add_argument(
+        "--public-key-path", type=Path, default=None, help="Path to public key for SSH access to agents"
+    )
 
     args = parser.parse_args()
 
-    uvicorn.run(app=app, host=args.host, port=args.port, ssl_keyfile=args.private_key_path, ssl_certfile=args.public_key_path)
+    uvicorn.run(
+        app=app, host=args.host, port=args.port, ssl_keyfile=args.private_key_path, ssl_certfile=args.public_key_path
+    )
 
 
 if __name__ == "__main__":
