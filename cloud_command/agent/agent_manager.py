@@ -3,9 +3,11 @@
 # Standard libraries
 import asyncio
 import threading
+from http import HTTPStatus
 
 # Third-party libraries
 from attrs import define, field
+from fastapi import HTTPException
 from loguru import logger
 
 # Project libraries
@@ -30,19 +32,22 @@ class AgentManager:
                     self.agent_list.append(agent)
                     logger.debug(f"Loaded agent with name {agent.name}")
                 except Exception:
-                    logger.exception(f"Failed to load agent config from {config_path}")
+                    error_log = f"Failed to load agent config from {config_path}"
+                    logger.error(error_log)
+                    raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=error_log)
 
     def get_agent(self, name: str) -> Agent:
         with self._lock:
             for agent in self.agent_list:
                 if agent.name == name:
                     return agent
-        raise KeyError(f"Could not find agent with name {name}")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=f"Could not find agent with name {name}")
 
     async def delete_agent(self, name: str) -> None:
         """Destroy the selected agent."""
         agent = self.get_agent(name)
         await asyncio.to_thread(agent.destroy)
+        agent.delete_on_exit = False
         with self._lock:
             self.agent_list = [existing_agent for existing_agent in self.agent_list if existing_agent.name != name]
 
@@ -50,7 +55,7 @@ class AgentManager:
         """Create and persist a new EC2-backed agent."""
         with self._lock:
             if any(existing_agent.name == name for existing_agent in self.agent_list):
-                raise ValueError(f"Agent with name {name} already exists")
+                raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=f"Agent with name {name} already exists")
 
         agent = Agent(name=name, config=Ec2Config(instance_type=instance_type, region=region))
         await asyncio.to_thread(agent.build)

@@ -4,6 +4,8 @@
 import json
 import shutil
 import sys
+from http import HTTPStatus
+from http.client import HTTPException
 from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,7 @@ from typing import Any
 import boto3
 from attrs import define, field, validators
 from fabric import Connection
+from fastapi import HTTPException
 from loguru import logger
 
 # Project libraries
@@ -41,7 +44,7 @@ class Ec2Config:
     key_pair: SshKeyPair | None = field(default=None, validator=validators.optional(validators.instance_of(SshKeyPair)))
 
     @classmethod
-    def from_dict(cls, config: dict[str, Any]) -> "Ec2Config":
+    def from_dict(cls, config: dict[str, Any]) -> Ec2Config:
         key_pair = None
         if config.get("key_pair"):
             key_pair = SshKeyPair(
@@ -194,11 +197,20 @@ class Agent:
     def connection(self) -> Connection:
         """Create a fabric connection object."""
         if self.instance_state != "running" and self.get_state() != "running":
-            raise RuntimeError(f"Agent {self.name} is not running. Current state: {self.get_state()}")
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail=f"Agent {self.name} is not running. Current state: {self.get_state()}",
+            )
         if not self.public_ip_address:
-            raise RuntimeError(f"Agent {self.name} does not have a public IP address yet")
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail=f"Agent {self.name} does not have a public IP address yet",
+            )
         if not self.config.key_pair:
-            raise RuntimeError(f"Agent {self.name} does not have an SSH key pair configured")
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail=f"Agent {self.name} does not have an SSH key pair configured",
+            )
         return Connection(
             host=str(self.public_ip_address),
             user="ec2-user",
@@ -231,7 +243,7 @@ class Agent:
             return result.stdout, result.stderr, result.return_code
 
     def get_statistics(self):
-        """Get the current status of the agent."""
+        """Get the current status of the agent"""
         with self.connection() as conn:
             uptime = conn.run("uptime", hide=True).stdout.strip()
             disk_usage = conn.run("df -h", hide=True).stdout.strip()
