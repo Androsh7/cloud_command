@@ -12,6 +12,8 @@ else:
 AGENT_DIRECTORY = PARENT_DIRECTORY / "agents"
 AGENT_DIRECTORY.mkdir(exist_ok=True)
 AGENT_CONFIG_FILENAME = "agent_config.json"
+REACT_FILE_PATH = PARENT_DIRECTORY / "frontend" / "dist"
+
 
 # Version
 with open(file=PARENT_DIRECTORY / "version.txt", encoding="utf-8") as version_file:

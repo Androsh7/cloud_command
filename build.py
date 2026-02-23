@@ -19,6 +19,7 @@ def build_linux():
         "docker run --name nuitka-compiler --detach androsh7/nuitka-compiler:latest-x86_64-glibc-2.28-py3.13 sleep infinity "
         "&& docker cp cloud_command nuitka-compiler:/src/cloud_command "
         "&& docker cp pyproject.toml nuitka-compiler:/src/pyproject.toml "
+        "&& docker cp frontend/dist nuitka-compiler:/src/frontend/dist "
         "&& docker cp version.txt nuitka-compiler:/src/version.txt "
         "&& docker exec nuitka-compiler python3 -m pip install .[dev] "
         "&& docker exec nuitka-compiler python3 -m nuitka "
@@ -27,6 +28,7 @@ def build_linux():
         "   --output-filename=/src/cloud_command.bin "
         "   --onefile-tempdir-spec={HOME}/.cloud_command "
         "   --include-data-file=version.txt=version.txt "
+        "   --include-data-dir=frontend/dist=frontend/dist "
         "   --include-module=cloud_command.app "
         "   /src/cloud_command/runner.py "
         "&& docker cp nuitka-compiler:/src/cloud_command.bin cloud_command.bin "
@@ -44,6 +46,7 @@ def build_windows():
         "--standalone "
         "--onefile "
         "--include-data-file=version.txt=version.txt "
+        "--include-data-dir=frontend/dist=frontend/dist "
         "--output-filename=cloud_command.exe "
         "--onefile-tempdir-spec={HOME}/.cloud_command "
         "cloud_command/runner.py",
