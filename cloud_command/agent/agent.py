@@ -44,7 +44,7 @@ class Ec2Config:
     key_pair: SshKeyPair | None = field(default=None, validator=validators.optional(validators.instance_of(SshKeyPair)))
 
     @classmethod
-    def from_dict(cls, config: dict[str, Any]) -> Ec2Config:
+    def from_dict(cls, config: dict[str, Any]):
         key_pair = None
         if config.get("key_pair"):
             key_pair = SshKeyPair(
