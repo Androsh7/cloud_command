@@ -1,9 +1,10 @@
 """Defines the agent router."""
 
-# Third-party libraries
+# Standard libraries
 import asyncio
 from pathlib import Path
 
+# Third-party libraries
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
