@@ -6,13 +6,14 @@ from contextlib import asynccontextmanager
 # Third-party libraries
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.constants import VERSION, REACT_FILE_PATH
+from cloud_command.constants import REACT_FILE_PATH, VERSION
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
-from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -38,6 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class SPAFileServer(StaticFiles):
     def __init__(self, directory: str | None = None, html: bool = False, check_dir: bool = True) -> None:
         super().__init__(directory=directory, html=html, check_dir=check_dir)
@@ -46,6 +48,8 @@ class SPAFileServer(StaticFiles):
         try:
             return await super().get_response(path, scope)
         except Exception:
+            logger.debug(f'SPA Redirect: "/{path}" -> "/index.html{scope["path"]}"')
             return await super().get_response("index.html", scope)
+
 
 app.mount("/", SPAFileServer(directory=REACT_FILE_PATH, html=True), name="react-app")
