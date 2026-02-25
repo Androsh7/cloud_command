@@ -5,10 +5,10 @@ from contextlib import asynccontextmanager
 
 # Third-party libraries
 from fastapi import FastAPI, Response
-
-from cloud_command.agent.agent_manager import agent_manager
+from fastapi.middleware.cors import CORSMiddleware
 
 # Project libraries
+from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.constants import VERSION, REACT_FILE_PATH
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
@@ -30,6 +30,13 @@ app = FastAPI(
 )
 app.include_router(cluster_router, prefix="/api")
 app.include_router(command_router, prefix="/api")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class SPAFileServer(StaticFiles):
     def __init__(self, directory: str | None = None, html: bool = False, check_dir: bool = True) -> None:

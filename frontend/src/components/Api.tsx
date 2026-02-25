@@ -1,4 +1,4 @@
-import axios, { AxiosError, type AxiosRequestConfig } from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 import {
   AgentModelSchema,
   CommandModelSchema,
@@ -8,7 +8,7 @@ import {
 import { ZodType } from "zod";
 
 const api = axios.create({
-  baseURL: "https://127.0.0.1:8080/api",
+  baseURL: "http://127.0.0.1:8080/api",
 });
 
 async function axiosZod<T>(
@@ -22,7 +22,7 @@ async function axiosZod<T>(
 export function getAgents(): Promise<AgentModel[]> {
   return axiosZod(AgentModelSchema.array(), {
     method: "GET",
-    url: "/agents",
+    url: "/agent/list",
   });
 }
 
