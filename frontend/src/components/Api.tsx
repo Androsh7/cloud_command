@@ -2,7 +2,6 @@ import axios, { type AxiosRequestConfig } from "axios";
 import {
   AgentModelSchema,
   CommandModelSchema,
-  CreateEC2AgentModelSchema,
   type AgentModel,
 } from "./Models";
 import { ZodType } from "zod";
@@ -26,10 +25,14 @@ export function getAgents(): Promise<AgentModel[]> {
   });
 }
 
-export function createAgent(region: string, instanceType: string) {
-  return axiosZod(CreateEC2AgentModelSchema, {
+export function createAgent(
+  name: string,
+  region: string,
+  instanceType: string,
+) {
+  return api.request<void>({
     method: "POST",
-    url: "/agents",
+    url: `/agent/${name}/create`,
     data: {
       region,
       instance_type: instanceType,
@@ -38,13 +41,13 @@ export function createAgent(region: string, instanceType: string) {
 }
 
 export function deleteAgent(name: string) {
-  return api.delete(`/agents/${name}`);
+  return api.delete(`/agent/${name}/delete`);
 }
 
 export function executeCommand(agentName: string, command: string) {
   return axiosZod(CommandModelSchema, {
     method: "POST",
-    url: `/agents/${agentName}/execute_command`,
+    url: `/agent/${agentName}/command/run`,
     data: {
       command,
     },
