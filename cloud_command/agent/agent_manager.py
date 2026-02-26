@@ -51,6 +51,10 @@ class AgentManager:
         with self._lock:
             self.agent_list = [existing_agent for existing_agent in self.agent_list if existing_agent.name != name]
 
+    async def update_all(self) -> None:
+        """Update the status of all agents."""
+        await asyncio.gather(*(asyncio.to_thread(agent.get_state) for agent in self.agent_list))
+
     async def create_ec2_agent(self, name: str, instance_type: str, region: str) -> Agent:
         """Create and persist a new EC2-backed agent."""
         with self._lock:
@@ -64,6 +68,5 @@ class AgentManager:
         with self._lock:
             self.agent_list.append(agent)
         return agent
-
 
 agent_manager = AgentManager()

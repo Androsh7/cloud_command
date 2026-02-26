@@ -229,10 +229,13 @@ class Agent:
         instance_dict = boto3_client.describe_instances(InstanceIds=[self.config.instance_id])["Reservations"][0][
             "Instances"
         ][0]
-        self.instance_state = instance_dict["State"]["Name"]
-        self.public_ip_address = (
-            IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
-        )
+
+        new_public_ip = IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
+        new_instance_state = instance_dict["State"]["Name"]
+        if self.instance_state != new_instance_state or self.public_ip_address != new_public_ip:
+            self.instance_state = new_instance_state
+            self.public_ip_address = new_public_ip
+            self.dump_config()
         return self.instance_state
 
     def run_command(self, command: str, sudo: bool = False, executable: str = "/bin/bash") -> tuple[str, str, int]:

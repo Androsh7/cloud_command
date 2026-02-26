@@ -61,12 +61,11 @@ async def get_cluster_list() -> list[AgentModel]:
         AgentModel(
             name=agent.name,
             state=agent.instance_state,
-            ip_address=str(agent.public_ip_address) if agent.public_ip_address else None,
+            public_ip_address=str(agent.public_ip_address) if agent.public_ip_address else None,
             config=AgentConfigModel.from_dict(agent.config.to_dict()),
         )
         for agent in agent_manager.agent_list
     ]
-
 
 class CreateEC2AgentModel(BaseModel):
     region: str = Field(examples=["us-east-2"])

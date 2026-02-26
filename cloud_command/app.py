@@ -1,6 +1,7 @@
 """Defines the CloudCommand API"""
 
 # Standard libraries
+import asyncio
 from contextlib import asynccontextmanager
 
 # Third-party libraries
@@ -11,20 +12,33 @@ from loguru import logger
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.constants import REACT_FILE_PATH, VERSION
+from cloud_command.constants import REACT_FILE_PATH, VERSION, STATUS_TRACKER_UPDATE_INTERVAL
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
 
+async def status_update_loop():
+    while True:
+        try:
+            if len(agent_manager.agent_list) == 0:
+                logger.debug("No agents to update.")
+            else:
+                logger.debug(f"Updating agent statuses ({STATUS_TRACKER_UPDATE_INTERVAL}s interval)")
+                await agent_manager.update_all()
+        except Exception as ex:
+            logger.error(f"Failed to update agent statuses: {ex}")
+        await asyncio.sleep(STATUS_TRACKER_UPDATE_INTERVAL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup actions
     agent_manager.load_all_agents()
+    status_task = asyncio.create_task(status_update_loop())
 
     yield
 
     # Shutdown actions
-
+    status_task.cancel()
+    
 
 app = FastAPI(
     title="CloudCommand", docs_url="/api/docs", openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan
