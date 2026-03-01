@@ -31,10 +31,15 @@ export default function Home() {
           {agents?.map((agent) => (
             <div
               key={agent.name}
-              className="list-group-item list-group-item-action flex-column align-items-start"
+              className="list-group-item flex-column align-items-start"
             >
               <div className="d-flex w-100 justify-content-between">
-                <h5 className="mb-1">{agent.name}</h5>
+                <h5 className="mb-1">
+                  {agent.name} ({agent.config.ami_id})
+                </h5>
+                <small>
+                  ({agent.config.instance_type} in {agent.config.region})
+                </small>
                 <small>{agent.state}</small>
               </div>
               <p className="mb-1">
@@ -42,6 +47,9 @@ export default function Home() {
                   ? `Public IP: ${agent.public_ip_address}`
                   : "No public IP address"}
               </p>
+              <a href={`/shell/${agent.name}`} className="btn btn-primary">
+                Open Shell
+              </a>
             </div>
           ))}
         </div>

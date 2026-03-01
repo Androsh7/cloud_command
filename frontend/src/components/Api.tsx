@@ -1,8 +1,9 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import {
   AgentModelSchema,
-  CommandModelSchema,
+  CommandResultModelSchema,
   type AgentModel,
+  type CommandResultModel,
 } from "./Models";
 import { ZodType } from "zod";
 
@@ -44,8 +45,11 @@ export function deleteAgent(name: string) {
   return api.delete(`/agent/${name}/delete`);
 }
 
-export function executeCommand(agentName: string, command: string) {
-  return axiosZod(CommandModelSchema, {
+export function executeCommand(
+  agentName: string,
+  command: string,
+): Promise<CommandResultModel> {
+  return axiosZod(CommandResultModelSchema, {
     method: "POST",
     url: `/agent/${agentName}/command/run`,
     data: {

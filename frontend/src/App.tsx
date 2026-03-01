@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "bootswatch/dist/slate/bootstrap.min.css";
+import "./App.css";
 import Navbar from "./components/Navbar";
 import CreateAgent from "./pages/CreateAgent";
 import DeleteAgent from "./pages/DeleteAgent";
@@ -33,7 +34,7 @@ export default function App() {
           errorElement={<InternalError />}
         />
         <Route
-          path="/interactive_shell"
+          path="/shell/:agentName"
           element={<InteractiveShell />}
           errorElement={<InternalError />}
         />
