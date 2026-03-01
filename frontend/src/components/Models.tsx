@@ -19,19 +19,6 @@ export const AgentConfigModelSchema = z.object({
 });
 export type AgentConfigModel = z.infer<typeof AgentConfigModelSchema>;
 
-export const AgentLocationModelSchema = z.object({
-  public_ip_address: z.string(),
-  hostname: z.string(),
-  city: z.string(),
-  region: z.string(),
-  country: z.string(),
-  loc: z.string(),
-  org: z.string(),
-  postal: z.string(),
-  timezone: z.string(),
-});
-export type AgentLocationModel = z.infer<typeof AgentLocationModelSchema>;
-
 export const AgentModelSchema = z.object({
   name: z.string(),
   state: z.string(),
@@ -42,7 +29,6 @@ export type AgentModel = z.infer<typeof AgentModelSchema>;
 
 export const AgentStatusModelSchema = z.object({
   uptime_seconds: z.number(),
-  location: AgentLocationModelSchema,
   disk_usage: z.string(),
   ram_usage: z.string(),
   cpu_usage: z.string(),

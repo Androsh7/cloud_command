@@ -1,8 +1,10 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import {
   AgentModelSchema,
+  AgentStatusModelSchema,
   CommandResultModelSchema,
   type AgentModel,
+  type AgentStatusModel,
   type CommandResultModel,
 } from "./Models";
 import { ZodType } from "zod";
@@ -55,5 +57,12 @@ export function executeCommand(
     data: {
       command,
     },
+  });
+}
+
+export function statusAgent(agentName: string): Promise<AgentStatusModel> {
+  return axiosZod(AgentStatusModelSchema, {
+    method: "GET",
+    url: `/agent/${agentName}/command/statistics`,
   });
 }
