@@ -5,28 +5,30 @@ import asyncio
 from contextlib import asynccontextmanager
 
 # Third-party libraries
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.constants import REACT_FILE_PATH, VERSION, STATUS_TRACKER_UPDATE_INTERVAL
+from cloud_command.constants import REACT_FILE_PATH, STATUS_TRACKER_UPDATE_INTERVAL, VERSION
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
+from cloud_command.router.error_model import ServerError
+
 
 async def status_update_loop():
     while True:
         try:
-            if len(agent_manager.agent_list) == 0:
-                logger.debug("No agents to update.")
-            else:
+            if not len(agent_manager.agent_list) == 0:
                 logger.debug(f"Updating agent statuses ({STATUS_TRACKER_UPDATE_INTERVAL}s interval)")
                 await agent_manager.update_all()
         except Exception as ex:
             logger.error(f"Failed to update agent statuses: {ex}")
         await asyncio.sleep(STATUS_TRACKER_UPDATE_INTERVAL)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,7 +40,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown actions
     status_task.cancel()
-    
+
 
 app = FastAPI(
     title="CloudCommand", docs_url="/api/docs", openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan
@@ -54,8 +56,20 @@ app.add_middleware(
 )
 
 
+# Add error handlers
+@app.exception_handler(ServerError)
+async def http_exception_handler(request: Request, exc: ServerError):
+    return JSONResponse(
+        content={
+            "error": exc.error,
+            "details": exc.details,
+        },
+        status_code=exc.status_code,
+    )
+
+
 class SPAFileServer(StaticFiles):
-    def __init__(self, directory: str | None = None, html: bool = False, check_dir: bool = True) -> None:
+    def __init__(self, directory: str | None = None, html: bool = False, check_dir: bool = True):
         super().__init__(directory=directory, html=html, check_dir=check_dir)
 
     async def get_response(self, path: str, scope: dict) -> Response:

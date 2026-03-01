@@ -15,10 +15,11 @@ from typing import Any
 import boto3
 from attrs import define, field, validators
 from fabric import Connection
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from loguru import logger
 
 # Project libraries
+from cloud_command.agent.agent_abstract import AbstractAgent
 from cloud_command.agent.aws import (
     create_ec2,
     create_ec2_key_pair,
@@ -27,10 +28,11 @@ from cloud_command.agent.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
-from cloud_command.agent.command_model import AgentLocationModel, AgentStatusModel
+from cloud_command.agent.command_model import AgentStatusModel
 from cloud_command.agent.file_model import FileUploadModel
 from cloud_command.agent.utils import SshKeyPair, create_ssh_key_pair, encode_script
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
+from cloud_command.router.error_model import ServerError
 
 
 @define
@@ -88,7 +90,7 @@ class Ec2Config:
 
 
 @define
-class Agent:
+class Agent(AbstractAgent):
     name: str = field(validator=validators.instance_of(str))
     config: Ec2Config = field(validator=validators.instance_of(Ec2Config))
     delete_on_exit: bool = field(default=True, validator=validators.instance_of(bool))
@@ -102,7 +104,7 @@ class Agent:
         validator=validators.optional(validators.instance_of(IPv4Address)),
     )
 
-    def __attrs_post_init__(self) -> None:
+    def __attrs_post_init__(self):
         self.config_dir = AGENT_DIRECTORY / self.name
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,7 +126,7 @@ class Agent:
             agent.public_ip_address = IPv4Address(payload["public_ip_address"])
         return agent
 
-    def destroy(self) -> None:
+    def destroy(self):
         """Destroy EC2 resources for this agent."""
         logger.debug(f"Destroying EC2 resources for {self.name}")
         if not self.config.instance_id:
@@ -159,7 +161,7 @@ class Agent:
             )
         return config_path
 
-    def __del__(self) -> None:
+    def __del__(self):
         if sys.meta_path is None:
             return
         if not getattr(self, "delete_on_exit", False):
@@ -170,7 +172,7 @@ class Agent:
             return
         self.destroy()
 
-    def build(self) -> None:
+    def build(self):
         """Provision the EC2 instance and related resources."""
         logger.debug(f"Building EC2 for {self.name}")
         self.config.key_pair_name = f"ssh-key-{self.name}"
@@ -199,18 +201,21 @@ class Agent:
     def connection(self) -> Connection:
         """Create a fabric connection object."""
         if self.instance_state != "running" and self.get_state() != "running":
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                error="Agent error",
                 detail=f"Agent {self.name} is not running. Current state: {self.get_state()}",
             )
         if not self.public_ip_address:
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                error="Agent error",
                 detail=f"Agent {self.name} does not have a public IP address yet",
             )
         if not self.config.key_pair:
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                error="Agent error",
                 detail=f"Agent {self.name} does not have an SSH key pair configured",
             )
         return Connection(
@@ -247,6 +252,7 @@ class Agent:
     def get_statistics(self):
         """Get the current status of the agent"""
         with self.connection() as conn:
+            # Get uptime
             uptime_seconds = float(conn.run("cat /proc/uptime", hide=True).stdout.strip().split(" ")[0])
 
             # Get disk usage
@@ -269,12 +275,8 @@ class Agent:
             cpu_usage_matches = re.search(r"(\d+(\.\d+)?) id", cpu_usage_output)
             cpu_usage = f"{100 - float(cpu_usage_matches.group(1)):.2f}%"
 
-            # Get location info
-            location = AgentLocationModel.from_ipinfo_dict(json.loads(conn.run("curl -s ipinfo.io", hide=True).stdout))
-
             return AgentStatusModel(
                 uptime_seconds=uptime_seconds,
-                location=location,
                 disk_usage=disk_usage,
                 ram_usage=ram_usage,
                 cpu_usage=cpu_usage,
@@ -286,8 +288,9 @@ class Agent:
 
         # Fix upload path
         if not destination_path.startswith("/"):
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.BAD_REQUEST,
+                error="Input error",
                 detail=f"Destination path must be absolute. Received: {destination_path}",
             )
         if destination_path.endswith("/"):
@@ -297,8 +300,9 @@ class Agent:
             try:
                 conn.put(file.file, destination_path)
             except OSError as exc:
-                raise HTTPException(
-                    status_code=HTTPStatus.BAD_REQUEST,
+                raise ServerError(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    error="Network error",
                     detail=f"Upload failed for '{destination_path}': {exc}",
                 ) from exc
 
@@ -311,13 +315,15 @@ class Agent:
     def download_file(self, source_path: str) -> tuple[bytes, str, str]:
         """Download a file from the EC2 instance and return bytes, filename, and mime type."""
         if not source_path.startswith("/"):
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.BAD_REQUEST,
+                error="Input error",
                 detail=f"Source path must be absolute. Received: {source_path}",
             )
         if source_path.endswith("/"):
-            raise HTTPException(
+            raise ServerError(
                 status_code=HTTPStatus.BAD_REQUEST,
+                error="Input error",
                 detail=f"Source path must reference a file. Received: {source_path}",
             )
 
@@ -329,8 +335,9 @@ class Agent:
                 with conn.sftp() as sftp, sftp.open(source_path, "rb") as remote_file:
                     payload = remote_file.read()
             except OSError as exc:
-                raise HTTPException(
-                    status_code=HTTPStatus.BAD_REQUEST,
+                raise ServerError(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    error="Network error",
                     detail=f"Download failed for '{source_path}': {exc}",
                 ) from exc
 

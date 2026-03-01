@@ -2,6 +2,7 @@
 
 # Standard libraries
 import asyncio
+from http import HTTPStatus
 from pathlib import Path
 
 # Third-party libraries
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
+from cloud_command.router.error_model import ErrorResponse
 
 cluster_router = APIRouter()
 
@@ -31,7 +33,7 @@ class AgentConfigModel(BaseModel):
     key_pair: SshKeyPairModel
 
     @classmethod
-    def from_dict(cls, config: dict) -> "AgentConfigModel":
+    def from_dict(cls, config: dict):
         return cls(
             instance_type=config["instance_type"],
             region=config["region"],
@@ -67,13 +69,20 @@ async def get_cluster_list() -> list[AgentModel]:
         for agent in agent_manager.agent_list
     ]
 
+
 class CreateEC2AgentModel(BaseModel):
     region: str = Field(examples=["us-east-2"])
     instance_type: str = Field(examples=["t4g.nano"])
 
 
-@cluster_router.post("/agent/{name}/create", tags=["Agents"])
-async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel) -> None:
+@cluster_router.post(
+    "/agent/{name}/create",
+    tags=["Agents"],
+    responses={
+        HTTPStatus.CONFLICT: {"model": ErrorResponse},
+    },
+)
+async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel):
     await agent_manager.create_ec2_agent(
         name=name,
         instance_type=create_ec2_model.instance_type,
@@ -82,11 +91,17 @@ async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel) -> 
 
 
 @cluster_router.delete("/agent/{name}/delete", tags=["Agents"])
-async def delete_agent(name: str) -> None:
+async def delete_agent(name: str):
     await agent_manager.delete_agent(name=name)
 
 
-@cluster_router.get("/agent/{name}/state", tags=["Agents"])
+@cluster_router.get(
+    "/agent/{name}/state",
+    tags=["Agents"],
+    responses={
+        HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
+    },
+)
 async def get_agent_state(name: str) -> str:
     agent = agent_manager.get_agent(name=name)
     return await asyncio.to_thread(agent.get_state)
