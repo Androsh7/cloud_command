@@ -19,6 +19,7 @@ def build_linux():
         "docker run --name nuitka-compiler --detach androsh7/nuitka-compiler:latest-x86_64-glibc-2.28-py3.13 sleep infinity "
         "&& docker cp cloud_command nuitka-compiler:/src/cloud_command "
         "&& docker cp pyproject.toml nuitka-compiler:/src/pyproject.toml "
+        "&& docker exec nuitka-compiler mkdir -p /src/frontend"
         "&& docker cp frontend/dist nuitka-compiler:/src/frontend/dist "
         "&& docker cp version.txt nuitka-compiler:/src/version.txt "
         "&& docker exec nuitka-compiler python3 -m pip install .[dev] "
