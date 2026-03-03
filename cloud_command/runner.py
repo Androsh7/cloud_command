@@ -6,10 +6,12 @@ from pathlib import Path
 
 # Third-party libraries
 import uvicorn
+from loguru import logger
 
 # Project libraries
 from cloud_command.app import app
-from cloud_command.constants import VERSION
+from cloud_command.constants import VERSION, GENERATED_SSL_CERTIFICATE, GENERATED_SSL_KEY
+from cloud_command.ssl_cert import generate_self_signed_cert
 
 
 def main():
@@ -30,6 +32,17 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Validate ssl path
+    if args.private_key_path and args.public_key_path:
+        pass
+    elif args.private_key_path or args.public_key_path:
+        parser.error("Both the private and public key must be specified")
+    else:
+        logger.warning(f'No SSL certificate specified, Generating self-signed certificate')
+        generate_self_signed_cert()
+        args.private_key_path = GENERATED_SSL_KEY
+        args.public_key_path = GENERATED_SSL_CERTIFICATE
 
     uvicorn.run(
         app=app,

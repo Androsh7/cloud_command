@@ -27,5 +27,9 @@ SHELL_SESSION_POOL_SIZE = 5
 # SSH
 SSH_TIMEOUT = 10
 
+# SSL
+GENERATED_SSL_CERTIFICATE = PARENT_DIRECTORY / "self-signed.crt"
+GENERATED_SSL_KEY = PARENT_DIRECTORY / "self-signed.key"
+
 # AWS
 AWS_EC2_STATES = ("pending", "running", "shutting-down", "terminated", "stopping", "stopped")
