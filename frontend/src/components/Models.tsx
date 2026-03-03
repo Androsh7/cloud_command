@@ -90,7 +90,9 @@ export type HTTPValidationError = z.infer<typeof HTTPValidationErrorSchema>;
 export const CreateShellSessionModelSchema = z.object({
   agent: z.string(),
 });
-export type CreateShellSessionModel = z.infer<typeof CreateShellSessionModelSchema>;
+export type CreateShellSessionModel = z.infer<
+  typeof CreateShellSessionModelSchema
+>;
 
 export const ShellSessionModelSchema = z.object({
   agent_name: z.string(),
