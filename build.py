@@ -19,10 +19,10 @@ def build_npm():
     subprocess.run(
         "docker build -t npm-builder:latest -f npm_build.Dockerfile . "
         "&& docker run --name npm-builder npm-builder:latest "
-        "&& docker cp npm-builder:/src/dist frontend/dist "
+        "&& docker cp npm-builder:/src/dist . "
         "&& docker rm npm-builder "
         "&& docker rmi npm-builder:latest",
-        cwd=PARENT_DIRECTORY,
+        cwd=PARENT_DIRECTORY / "frontend",
         shell=True,
         check=True,
     )
