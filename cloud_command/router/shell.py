@@ -10,8 +10,8 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel, Field
 
 # Project libraries
-from cloud_command.command.commands import AgentStatusModel, CommandModel, CommandResultModel
-from cloud_command.command.shell_manager import ShellSession, shell_session_manager
+from cloud_command.command.commands import AgentStatusModel
+from cloud_command.command.shell_manager import ShellSession, TmuxSendKeys, shell_session_manager
 from cloud_command.router.error_model import ErrorResponse
 
 shell_router = APIRouter(tags=["Shell"])
@@ -71,16 +71,32 @@ async def delete_shell_session(uuid: UUID):
 
 
 @shell_router.post(
-    "/shell/{uuid}/run_command",
+    "/shell/{uuid}/send_command",
+    responses={
+        HTTPStatus.CREATED: {"detail": "Sent command", "content": {}},
+        HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+        HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
+    },
+    status_code=HTTPStatus.CREATED,
+)
+async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Response:
+    shell_session = shell_session_manager.get_session(uuid=uuid)
+    await asyncio.to_thread(shell_session.session_send_command, command)
+    return Response(status_code=HTTPStatus.CREATED)
+
+
+@shell_router.get(
+    "/shell/{uuid}/get_output",
     responses={
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
         HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
     },
 )
-async def run_command_shell_session(uuid: UUID, command: CommandModel) -> CommandResultModel:
+async def get_output_shell_session(uuid: UUID) -> str:
     shell_session = shell_session_manager.get_session(uuid=uuid)
-    return await asyncio.to_thread(shell_session.session_run_command, command)
+    return await asyncio.to_thread(shell_session.session_get_output)
 
 
 @shell_router.post(
