@@ -77,7 +77,7 @@ class ShellSession:
     def session_get_output(self) -> str:
         with self.command_lock:
             conn = self.auto_create_tmux_session()
-            result = conn.run(f"tmux capture-pane -t {self.uuid} -p -S -", hide=True)
+            result = conn.run(f"tmux capture-pane -t {self.uuid} -p -J -S -", hide=True)
             return result.stdout.strip()
 
     def session_get_statistics(self) -> AgentStatusModel:
@@ -85,9 +85,12 @@ class ShellSession:
             return get_statistics(conn=self.auto_renew_connection(connection_name="polling"))
 
     def session_destroy(self):
-        self.command_connection.run(f"tmux kill-session -t {self.uuid}", warn=True)
-        self.command_connection.close()
-        self.polling_connection.close()
+        if self.tmux_exists:
+            self.command_connection.run(f"tmux kill-session -t {self.uuid}", warn=True)
+        if self.command_connection.is_connected:
+            self.command_connection.close()
+        if self.polling_connection.is_connected:
+            self.polling_connection.close()
 
     def __del__(self):
         self.session_destroy()
