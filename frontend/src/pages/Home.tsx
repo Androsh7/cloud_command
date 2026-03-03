@@ -1,7 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
-import { getAgents } from "../components/Api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { createShellSession, getAgents } from "../components/Api";
 
 export default function Home() {
+  const navigate = useNavigate();
+  const [launchingAgentName, setLaunchingAgentName] = useState<string | null>(
+    null,
+  );
   const {
     data: agents,
     isLoading,
@@ -11,6 +17,25 @@ export default function Home() {
     queryFn: () => getAgents(),
     refetchInterval: 5000,
   });
+
+  const createShellSessionMutation = useMutation({
+    mutationFn: (agentName: string) => createShellSession(agentName),
+    onSuccess: (uuid) => {
+      navigate(`/shell/${uuid}`);
+    },
+    onSettled: () => {
+      setLaunchingAgentName(null);
+    },
+  });
+
+  function handleOpenShell(agentName: string) {
+    if (createShellSessionMutation.isPending) {
+      return;
+    }
+    setLaunchingAgentName(agentName);
+    createShellSessionMutation.mutate(agentName);
+  }
+
   if (isLoading) {
     return <div className="container mt-4">Loading...</div>;
   }
@@ -47,13 +72,27 @@ export default function Home() {
                   ? `Public IP: ${agent.public_ip_address}`
                   : "No public IP address"}
               </p>
-              <a href={`/shell/${agent.name}`} className="btn btn-primary">
-                Open Shell
-              </a>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleOpenShell(agent.name)}
+                disabled={createShellSessionMutation.isPending}
+              >
+                {createShellSessionMutation.isPending &&
+                launchingAgentName === agent.name
+                  ? "Opening..."
+                  : "Open Shell"}
+              </button>
             </div>
           ))}
         </div>
       )}
+      {createShellSessionMutation.error ? (
+        <div className="alert alert-danger mt-3 mb-0">
+          Failed to open shell:{" "}
+          {(createShellSessionMutation.error as Error).message}
+        </div>
+      ) : null}
     </div>
   );
 }

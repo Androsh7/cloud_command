@@ -73,7 +73,7 @@ class ShellSession:
         with self.command_lock:
             conn = self.auto_create_tmux_session()
             result = conn.run(f"tmux capture-pane -t {self.uuid} -p -S -", hide=True)
-            return result.stdout
+            return result.stdout.strip()
 
     def session_get_statistics(self) -> AgentStatusModel:
         with self.polling_lock:

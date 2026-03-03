@@ -1,7 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { executeCommand, statusAgent } from "../components/Api";
+import {
+  getShellOutput,
+  getShellStatistics,
+  sendShellCommand,
+} from "../components/Api";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -9,26 +13,14 @@ import relativeTime from "dayjs/plugin/relativeTime";
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
 
-type ShellEntry = {
-  id: number;
-  command: string;
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-  isPending: boolean;
-  error?: string;
-};
-
 export default function InteractiveShell() {
-  const { agentName } = useParams<{ agentName: string }>();
+  const { uuid } = useParams<{ uuid: string }>();
   const [command, setCommand] = useState("");
-  const [history, setHistory] = useState<ShellEntry[]>([]);
   const [runningFrame, setRunningFrame] = useState(0);
   const [isWindowFocused, setIsWindowFocused] = useState(() =>
     typeof document !== "undefined" ? document.hasFocus() : true,
   );
   const outputContainerRef = useRef<HTMLDivElement | null>(null);
-  const nextEntryIdRef = useRef(1);
 
   useEffect(() => {
     const handleFocus = () => setIsWindowFocused(true);
@@ -44,58 +36,47 @@ export default function InteractiveShell() {
   }, []);
 
   const {
+    data: terminalOutput,
+    isLoading: isOutputLoading,
+    error: outputError,
+    refetch: refetchOutput,
+  } = useQuery({
+    queryKey: ["shellOutput", uuid],
+    queryFn: () => {
+      if (!uuid) {
+        throw new Error("Shell session UUID is missing in route.");
+      }
+      return getShellOutput(uuid);
+    },
+    enabled: Boolean(uuid) && isWindowFocused,
+    refetchInterval: 1500,
+  });
+
+  const {
     data: agentStatistics,
     isLoading: isStatisticsLoading,
     error: statisticsError,
   } = useQuery({
-    queryKey: ["agentStatistics", agentName],
+    queryKey: ["shellStatistics", uuid],
     queryFn: () => {
-      if (!agentName) {
-        throw new Error("Agent name is missing in route.");
+      if (!uuid) {
+        throw new Error("Shell session UUID is missing in route.");
       }
-      return statusAgent(agentName);
+      return getShellStatistics(uuid);
     },
-    enabled: Boolean(agentName) && isWindowFocused,
+    enabled: Boolean(uuid) && isWindowFocused,
     refetchInterval: 5000,
   });
 
   const runCommandMutation = useMutation({
-    mutationFn: ({ cmd }: { cmd: string; entryId: number }) => {
-      if (!agentName) {
-        throw new Error("Agent name is missing in route.");
+    mutationFn: (cmd: string) => {
+      if (!uuid) {
+        throw new Error("Shell session UUID is missing in route.");
       }
-      return executeCommand(agentName, cmd);
+      return sendShellCommand(uuid, cmd);
     },
-    onSuccess: (result, { entryId }) => {
-      setHistory((previous) =>
-        previous.map((entry) =>
-          entry.id === entryId
-            ? {
-                ...entry,
-                stdout: result.stdout,
-                stderr: result.stderr,
-                exitCode: result.exit_code,
-                isPending: false,
-              }
-            : entry,
-        ),
-      );
-    },
-    onError: (error, { entryId }) => {
-      setHistory((previous) =>
-        previous.map((entry) =>
-          entry.id === entryId
-            ? {
-                ...entry,
-                stdout: "",
-                stderr: "",
-                exitCode: null,
-                isPending: false,
-                error: (error as Error).message,
-              }
-            : entry,
-        ),
-      );
+    onSuccess: () => {
+      void refetchOutput();
     },
   });
 
@@ -105,25 +86,12 @@ export default function InteractiveShell() {
     if (!cmd || runCommandMutation.isPending) {
       return;
     }
-    const entryId = nextEntryIdRef.current++;
-    setHistory((previous) => [
-      ...previous,
-      {
-        id: entryId,
-        command: cmd,
-        stdout: "",
-        stderr: "",
-        exitCode: null,
-        isPending: true,
-      },
-    ]);
     setCommand("");
-    runCommandMutation.mutate({ cmd, entryId });
+    runCommandMutation.mutate(cmd);
   }
 
   useEffect(() => {
-    const hasPendingEntry = history.some((entry) => entry.isPending);
-    if (!hasPendingEntry) {
+    if (!runCommandMutation.isPending) {
       setRunningFrame(0);
       return;
     }
@@ -131,7 +99,7 @@ export default function InteractiveShell() {
       setRunningFrame((previous) => (previous + 1) % 3);
     }, 450);
     return () => window.clearInterval(intervalId);
-  }, [history]);
+  }, [runCommandMutation.isPending]);
 
   useEffect(() => {
     const outputContainer = outputContainerRef.current;
@@ -139,13 +107,13 @@ export default function InteractiveShell() {
       return;
     }
     outputContainer.scrollTop = outputContainer.scrollHeight;
-  }, [history]);
+  }, [terminalOutput, runCommandMutation.isPending]);
 
-  if (!agentName) {
+  if (!uuid) {
     return (
       <div className="container mt-4">
         <div className="alert alert-danger mb-0">
-          Invalid route. Use /shell/&lt;agent-name&gt;.
+          Invalid route. Use /shell/&lt;uuid&gt;.
         </div>
       </div>
     );
@@ -154,7 +122,7 @@ export default function InteractiveShell() {
   return (
     <div className="container mt-4">
       <h1>Interactive Shell</h1>
-      <p className="text-muted mb-3">Connected to agent: {agentName}</p>
+      <p className="text-muted mb-3">Shell session: {uuid}</p>
 
       <div className="card">
         <div
@@ -165,43 +133,27 @@ export default function InteractiveShell() {
             maxHeight: "420px",
             overflowY: "auto",
             fontFamily: "monospace",
+            whiteSpace: "pre-wrap",
           }}
         >
-          {history.length === 0 ? (
-            <p className="text-secondary mb-0">
-              Enter a command to run it on {agentName}.
+          {isOutputLoading && !terminalOutput ? (
+            <p className="text-secondary mb-0">Loading terminal output...</p>
+          ) : outputError && !terminalOutput ? (
+            <p className="text-danger mb-0">
+              Failed to fetch output: {(outputError as Error).message}
             </p>
+          ) : terminalOutput ? (
+            <pre className="mb-0 text-light">{terminalOutput}</pre>
           ) : (
-            history.map((entry) => (
-              <div key={entry.id} className="mb-3">
-                <div>
-                  <span className="text-info">{agentName}</span>:~${" "}
-                  {entry.command}
-                </div>
-                {entry.isPending ? (
-                  <div className="text-secondary">
-                    Running{".".repeat(runningFrame + 1)}
-                  </div>
-                ) : null}
-                {entry.stdout ? (
-                  <pre className="mb-1 text-light">{entry.stdout}</pre>
-                ) : null}
-                {entry.stderr ? (
-                  <pre className="mb-1 text-warning">{entry.stderr}</pre>
-                ) : null}
-                {entry.error ? (
-                  <div className="text-danger">
-                    Request failed: {entry.error}
-                  </div>
-                ) : null}
-                {entry.exitCode !== null ? (
-                  <small className="text-secondary">
-                    Exit code: {entry.exitCode}
-                  </small>
-                ) : null}
-              </div>
-            ))
+            <p className="text-secondary mb-0">
+              Enter a command to start interacting with this shell session.
+            </p>
           )}
+          {runCommandMutation.isPending ? (
+            <div className="text-secondary mt-2">
+              Running{".".repeat(runningFrame + 1)}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -210,7 +162,7 @@ export default function InteractiveShell() {
           Command
         </label>
         <div className="input-group">
-          <span className="input-group-text">{agentName}:~$</span>
+          <span className="input-group-text">session$</span>
           <input
             id="shell-command"
             className="form-control"
@@ -228,6 +180,12 @@ export default function InteractiveShell() {
           </button>
         </div>
       </form>
+
+      {runCommandMutation.error ? (
+        <div className="alert alert-danger mt-3 mb-0">
+          Failed to send command: {(runCommandMutation.error as Error).message}
+        </div>
+      ) : null}
 
       <div className="card mt-4">
         <div className="card-header">Agent Statistics</div>

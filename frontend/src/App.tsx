@@ -34,7 +34,7 @@ export default function App() {
           errorElement={<InternalError />}
         />
         <Route
-          path="/shell/:agentName"
+          path="/shell/:uuid"
           element={<InteractiveShell />}
           errorElement={<InternalError />}
         />

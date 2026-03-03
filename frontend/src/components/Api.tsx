@@ -15,7 +15,7 @@ import {
 import { z, ZodType } from "zod";
 
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: "http://127.0.0.1:8080/api",
 });
 
 async function axiosZod<T>(
@@ -100,7 +100,10 @@ export function uploadAgentFile(
   });
 }
 
-export function downloadAgentFile(agentName: string, path: string): Promise<Blob> {
+export function downloadAgentFile(
+  agentName: string,
+  path: string,
+): Promise<Blob> {
   return api
     .request<Blob>({
       method: "GET",
