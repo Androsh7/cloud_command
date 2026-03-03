@@ -1,0 +1,17 @@
+# VS Code
+.vscode
+
+# Python
+.venv/
+build/
+__pycache__/
+*.egg-info
+
+# Nuitka
+*.bin
+*.exe
+*.dist/
+*.build/
+
+# Project files
+agents/

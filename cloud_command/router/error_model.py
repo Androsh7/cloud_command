@@ -15,4 +15,4 @@ class ServerError(Exception):
 
 class ErrorResponse(BaseModel):
     error: str = Field(examples=["Error name"])
-    details: str = Field(examples=['Error description'])
+    details: str = Field(examples=["Error description"])

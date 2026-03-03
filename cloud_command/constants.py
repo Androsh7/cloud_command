@@ -21,6 +21,9 @@ STATUS_TRACKER_UPDATE_INTERVAL = 15
 with open(file=PARENT_DIRECTORY / "version.txt", encoding="utf-8") as version_file:
     VERSION = version_file.read()
 
+# Shell
+SHELL_SESSION_POOL_SIZE = 5
+
 # SSH
 SSH_TIMEOUT = 10
 

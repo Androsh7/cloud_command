@@ -8,32 +8,40 @@ from pathlib import Path
 PARENT_DIRECTORY = Path(__file__).parent
 
 
-def build_linux():
+def build_npm():
     subprocess.run(
-        "docker rm --force nuitka-compiler",
+        "docker rm --force npm-builder",
         cwd=PARENT_DIRECTORY,
         shell=True,
         check=False,
+        capture_output=True,
     )
     subprocess.run(
-        "docker run --name nuitka-compiler --detach androsh7/nuitka-compiler:latest-x86_64-glibc-2.28-py3.13 sleep infinity "
-        "&& docker cp cloud_command nuitka-compiler:/src/cloud_command "
-        "&& docker cp pyproject.toml nuitka-compiler:/src/pyproject.toml "
-        "&& docker exec nuitka-compiler mkdir -p /src/frontend"
-        "&& docker cp frontend/dist nuitka-compiler:/src/frontend/dist "
-        "&& docker cp version.txt nuitka-compiler:/src/version.txt "
-        "&& docker exec nuitka-compiler python3 -m pip install .[dev] "
-        "&& docker exec nuitka-compiler python3 -m nuitka "
-        "   --standalone "
-        "   --onefile "
-        "   --output-filename=/src/cloud_command.bin "
-        "   --onefile-tempdir-spec={HOME}/.cloud_command "
-        "   --include-data-file=version.txt=version.txt "
-        "   --include-data-dir=frontend/dist=frontend/dist "
-        "   --include-module=cloud_command.app "
-        "   /src/cloud_command/runner.py "
+        "docker build -t npm-builder:latest -f npm_build.Dockerfile . "
+        "&& docker run --name npm-builder npm-builder:latest "
+        "&& docker cp npm-builder:/src/dist frontend/dist "
+        "&& docker rm npm-builder "
+        "&& docker rmi npm-builder:latest",
+        cwd=PARENT_DIRECTORY,
+        shell=True,
+        check=True,
+    )
+
+
+def build_linux():
+    subprocess.run(
+        "docker rmi --force nuitka-compiler:latest",
+        cwd=PARENT_DIRECTORY,
+        shell=True,
+        check=False,
+        capture_output=True,
+    )
+    subprocess.run(
+        "docker build -t nuitka-compiler:latest -f nuitka_build.Dockerfile . "
+        "&& docker run --name nuitka-compiler nuitka-compiler:latest "
         "&& docker cp nuitka-compiler:/src/cloud_command.bin cloud_command.bin "
-        "&& docker rm --force nuitka-compiler",
+        "&& docker rm nuitka-compiler "
+        "&& docker rmi nuitka-compiler",
         cwd=PARENT_DIRECTORY,
         shell=True,
         check=True,
@@ -65,6 +73,8 @@ def main():
     parser.add_argument("--build-all", action="store_true", help="Build the Windows and Linux executable")
     args = parser.parse_args()
 
+    if args.windows or args.linux or args.build_all:
+        build_npm()
     if args.windows or args.build_all:
         build_windows()
     if args.linux or args.build_all:

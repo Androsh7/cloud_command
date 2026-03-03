@@ -6,14 +6,14 @@ from http import HTTPStatus
 from pathlib import Path
 
 # Third-party libraries
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel, Field
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.router.error_model import ErrorResponse
 
-cluster_router = APIRouter()
+cluster_router = APIRouter(tags=["Agent"])
 
 
 class SshKeyPairModel(BaseModel):
@@ -57,7 +57,7 @@ class AgentModel(BaseModel):
     config: AgentConfigModel
 
 
-@cluster_router.get("/agent/list", tags=["Agents"])
+@cluster_router.get("/agent/list")
 async def get_cluster_list() -> list[AgentModel]:
     return [
         AgentModel(
@@ -77,27 +77,36 @@ class CreateEC2AgentModel(BaseModel):
 
 @cluster_router.post(
     "/agent/{name}/create",
-    tags=["Agents"],
+    status_code=HTTPStatus.CREATED,
     responses={
+        HTTPStatus.CREATED: {"description": "Agent is created", "content": {}},
         HTTPStatus.CONFLICT: {"model": ErrorResponse},
     },
 )
-async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel):
+async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel) -> Response:
     await agent_manager.create_ec2_agent(
         name=name,
         instance_type=create_ec2_model.instance_type,
         region=create_ec2_model.region,
     )
+    return Response(status_code=HTTPStatus.CREATED)
 
 
-@cluster_router.delete("/agent/{name}/delete", tags=["Agents"])
-async def delete_agent(name: str):
+@cluster_router.delete(
+    "/agent/{name}/delete",
+    status_code=HTTPStatus.NO_CONTENT,
+    responses={
+        HTTPStatus.NO_CONTENT: {"description": "Agent is deleted", "content": {}},
+        HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
+    },
+)
+async def delete_agent(name: str) -> Response:
     await agent_manager.delete_agent(name=name)
+    return Response(status_code=HTTPStatus.NO_CONTENT)
 
 
 @cluster_router.get(
     "/agent/{name}/state",
-    tags=["Agents"],
     responses={
         HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
     },

@@ -11,68 +11,73 @@ from fastapi.responses import StreamingResponse
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.agent.command_model import AgentStatusModel, CommandModel, CommandResultModel
-from cloud_command.agent.file_model import FileUploadModel
+from cloud_command.command.commands import (
+    AgentStatusModel,
+    CommandModel,
+    CommandResultModel,
+    download_file,
+    get_statistics,
+    run_command,
+    upload_file,
+)
+from cloud_command.command.file_model import FileUploadModel
 from cloud_command.router.error_model import ErrorResponse
 
-command_router = APIRouter()
+command_router = APIRouter(tags=["Commands"])
 
 
 @command_router.post(
-    "/agent/{name}/command/run",
-    tags=["Commands"],
+    "/agent/{name}/command/run_command",
     responses={
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
     },
 )
-async def run_command(name: str, command_model: CommandModel) -> CommandResultModel:
+async def agent_run_command(name: str, command_model: CommandModel) -> CommandResultModel:
     agent = agent_manager.get_agent(name=name)
-    stdout, stderr, exit_code = await asyncio.to_thread(
-        agent.run_command, command_model.command, sudo=command_model.sudo
-    )
-    return CommandResultModel(stdout=stdout, stderr=stderr, exit_code=exit_code)
+    with agent.connection() as conn:
+        return await asyncio.to_thread(run_command, conn, command_model)
 
 
 @command_router.get(
     "/agent/{name}/command/statistics",
-    tags=["Commands"],
     responses={
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
     },
 )
-async def get_command_status(name: str) -> AgentStatusModel:
+async def agent_command_status(name: str) -> AgentStatusModel:
     agent = agent_manager.get_agent(name=name)
-    return await asyncio.to_thread(agent.get_statistics)
+    with agent.connection() as conn:
+        return await asyncio.to_thread(get_statistics, conn=conn)
 
 
 @command_router.post(
     "/agent/{name}/command/upload",
-    tags=["Commands"],
     responses={
         HTTPStatus.BAD_REQUEST: {"model": ErrorResponse},
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
     },
 )
-async def upload_file(name: str, path: str, file: UploadFile = File(...)) -> FileUploadModel:
+async def agent_upload_file(name: str, path: str, file: UploadFile = File(...)) -> FileUploadModel:
     agent = agent_manager.get_agent(name=name)
-    return await asyncio.to_thread(agent.upload_file, file=file, destination_path=path)
+    with agent.connection() as conn:
+        return await asyncio.to_thread(upload_file, conn=conn, file=file, destination_path=path)
 
 
 @command_router.get(
     "/agent/{name}/command/download",
-    tags=["Commands"],
     responses={
         HTTPStatus.BAD_REQUEST: {"model": ErrorResponse},
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
     },
 )
-async def download_file(name: str, path: str) -> StreamingResponse:
+async def agent_download_file(name: str, path: str) -> StreamingResponse:
     agent = agent_manager.get_agent(name=name)
-    payload, filename, mime_type = await asyncio.to_thread(agent.download_file, source_path=path)
+    with agent.connection() as conn:
+        payload, filename, mime_type = await asyncio.to_thread(download_file, conn=conn, source_path=path)
     return StreamingResponse(
         content=BytesIO(payload),
         media_type=mime_type,

@@ -10,7 +10,7 @@ import {
 import { ZodType } from "zod";
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8080/api",
+  baseURL: "/api",
 });
 
 async function axiosZod<T>(
@@ -53,7 +53,7 @@ export function executeCommand(
 ): Promise<CommandResultModel> {
   return axiosZod(CommandResultModelSchema, {
     method: "POST",
-    url: `/agent/${agentName}/command/run`,
+    url: `/agent/${agentName}/command/run_command`,
     data: {
       command,
     },

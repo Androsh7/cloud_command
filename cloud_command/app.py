@@ -17,6 +17,7 @@ from cloud_command.constants import REACT_FILE_PATH, STATUS_TRACKER_UPDATE_INTER
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
 from cloud_command.router.error_model import ServerError
+from cloud_command.router.shell import shell_router
 
 
 async def status_update_loop():
@@ -47,6 +48,7 @@ app = FastAPI(
 )
 app.include_router(cluster_router, prefix="/api")
 app.include_router(command_router, prefix="/api")
+app.include_router(shell_router, prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
