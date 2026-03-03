@@ -8,6 +8,7 @@ import CreateAgent from "./pages/CreateAgent";
 import DeleteAgent from "./pages/DeleteAgent";
 import InteractiveShell from "./pages/InteractiveShell";
 import Login from "./pages/Login";
+import ShellSessions from "./pages/ShellSessions";
 
 function NotFound() {
   return <div className="container mt-4">Page not found</div>;
@@ -36,6 +37,11 @@ export default function App() {
         <Route
           path="/shell/:uuid"
           element={<InteractiveShell />}
+          errorElement={<InternalError />}
+        />
+        <Route
+          path="/shells"
+          element={<ShellSessions />}
           errorElement={<InternalError />}
         />
         <Route

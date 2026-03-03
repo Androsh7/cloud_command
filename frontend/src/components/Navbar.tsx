@@ -52,6 +52,16 @@ export default function Navbar() {
             </li>
             <li className="nav-item">
               <NavLink
+                to="/shells"
+                className={({ isActive }) =>
+                  "nav-link" + (isActive ? " active fw-bold text-info" : "")
+                }
+              >
+                Shell Sessions
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
                 to="/login"
                 className={({ isActive }) =>
                   "nav-link" + (isActive ? " active fw-bold text-info" : "")
