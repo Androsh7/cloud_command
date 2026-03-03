@@ -32,9 +32,7 @@ export default function InteractiveShell() {
   );
   const outputContainerRef = useRef<HTMLDivElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
-  const bottomStripRef = useRef<HTMLDivElement | null>(null);
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [bottomStripHeight, setBottomStripHeight] = useState(0);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [uploadPath, setUploadPath] = useState("/tmp/");
   const [downloadPath, setDownloadPath] = useState("");
@@ -112,6 +110,10 @@ export default function InteractiveShell() {
   const activeAgentName = shellSessions?.find(
     (shellSession) => shellSession.uuid === uuid,
   )?.agent_name;
+  const transferStatusMessage = !activeAgentName
+    ? "This shell session was not found. File transfer is unavailable."
+    : fileTransferMessage;
+  const transferStatusClass = !activeAgentName ? "text-warning" : "text-info";
 
   const runCommandMutation = useMutation({
     mutationFn: (cmd: string) => {
@@ -309,25 +311,6 @@ export default function InteractiveShell() {
     };
   }, [scrollOutputToBottom]);
 
-  useLayoutEffect(() => {
-    const bottomStrip = bottomStripRef.current;
-    if (!bottomStrip) {
-      return;
-    }
-
-    const syncHeight = () => {
-      setBottomStripHeight(bottomStrip.offsetHeight);
-    };
-
-    syncHeight();
-    const resizeObserver = new ResizeObserver(syncHeight);
-    resizeObserver.observe(bottomStrip);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
   if (!uuid) {
     return (
       <div className="container mt-4">
@@ -340,11 +323,7 @@ export default function InteractiveShell() {
 
   return (
     <div className="shell-page">
-      <div
-        ref={outputContainerRef}
-        className="shell-output"
-        style={{ paddingBottom: `${bottomStripHeight + 24}px` }}
-      >
+      <div ref={outputContainerRef} className="shell-output">
         {isOutputLoading && !terminalOutput ? (
           <p className="text-secondary mb-0">Loading terminal output...</p>
         ) : outputError && !terminalOutput ? (
@@ -361,7 +340,7 @@ export default function InteractiveShell() {
         <div ref={bottomAnchorRef} />
       </div>
 
-      <div ref={bottomStripRef} className="shell-bottom-strip">
+      <div className="shell-bottom-strip">
         <div className="shell-session-label">
           Session: <code>{uuid}</code>
         </div>
@@ -428,14 +407,10 @@ export default function InteractiveShell() {
             {downloadFileMutation.isPending ? "Downloading..." : "Download File"}
           </button>
 
-          {!activeAgentName ? (
-            <div className="text-warning small">
-              This shell session was not found. File transfer is unavailable.
-            </div>
-          ) : null}
-
-          {fileTransferMessage ? (
-            <div className="text-info small mt-2">{fileTransferMessage}</div>
+          {transferStatusMessage ? (
+            <span className={`small shell-transfer-message ${transferStatusClass}`}>
+              {transferStatusMessage}
+            </span>
           ) : null}
         </div>
 
