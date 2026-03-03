@@ -52,3 +52,28 @@
   gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
+
+.shell-transfer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.shell-transfer-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.shell-transfer-dialog {
+  width: min(460px, 100%);
+  background-color: #262626;
+  border: 1px solid #495057;
+}
