@@ -4,11 +4,8 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "bootswatch/dist/slate/bootstrap.min.css";
 import "./App.css";
 import Navbar from "./components/Navbar";
-import CreateAgent from "./pages/CreateAgent";
-import DeleteAgent from "./pages/DeleteAgent";
 import InteractiveShell from "./pages/InteractiveShell";
 import Login from "./pages/Login";
-import ShellSessions from "./pages/ShellSessions";
 
 function NotFound() {
   return <div className="container mt-4">Page not found</div>;
@@ -25,23 +22,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} errorElement={<InternalError />} />
         <Route
-          path="/create_agent"
-          element={<CreateAgent />}
-          errorElement={<InternalError />}
-        />
-        <Route
-          path="/delete_agent"
-          element={<DeleteAgent />}
-          errorElement={<InternalError />}
-        />
-        <Route
           path="/shell/:uuid"
           element={<InteractiveShell />}
-          errorElement={<InternalError />}
-        />
-        <Route
-          path="/shells"
-          element={<ShellSessions />}
           errorElement={<InternalError />}
         />
         <Route
