@@ -33,7 +33,9 @@ export default function InteractiveShell() {
   const outputContainerRef = useRef<HTMLDivElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(
+    null,
+  );
   const [uploadPath, setUploadPath] = useState("/tmp/");
   const [downloadPath, setDownloadPath] = useState("");
   const [transferDialog, setTransferDialog] = useState<
@@ -184,7 +186,10 @@ export default function InteractiveShell() {
     },
   });
 
-  function resolveUploadDestinationPath(path: string, filename: string): string {
+  function resolveUploadDestinationPath(
+    path: string,
+    filename: string,
+  ): string {
     const trimmedPath = path.trim();
     if (!trimmedPath) {
       return `/tmp/${filename}`;
@@ -196,14 +201,22 @@ export default function InteractiveShell() {
   }
 
   function openUploadDialog() {
-    if (!activeAgentName || uploadFileMutation.isPending || downloadFileMutation.isPending) {
+    if (
+      !activeAgentName ||
+      uploadFileMutation.isPending ||
+      downloadFileMutation.isPending
+    ) {
       return;
     }
     setTransferDialog("upload");
   }
 
   function openDownloadDialog() {
-    if (!activeAgentName || uploadFileMutation.isPending || downloadFileMutation.isPending) {
+    if (
+      !activeAgentName ||
+      uploadFileMutation.isPending ||
+      downloadFileMutation.isPending
+    ) {
       return;
     }
     setTransferDialog("download");
@@ -264,7 +277,11 @@ export default function InteractiveShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [transferDialog, uploadFileMutation.isPending, downloadFileMutation.isPending]);
+  }, [
+    transferDialog,
+    uploadFileMutation.isPending,
+    downloadFileMutation.isPending,
+  ]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -347,35 +364,35 @@ export default function InteractiveShell() {
 
         <div className="shell-stats-row">
           {isStatisticsLoading ? (
-            <span className="badge text-bg-secondary">Loading stats...</span>
+            <span className="badge bg-warning text-dark">Loading stats...</span>
           ) : statisticsError ? (
-            <span className="badge text-bg-danger">
+            <span className="badge bg-danger text-dark">
               Stats unavailable: {(statisticsError as Error).message}
             </span>
           ) : agentStatistics ? (
             <>
-              <span className="badge text-bg-secondary">
+              <span className="badge bg-info text-dark">
                 Uptime:{" "}
                 {dayjs
                   .duration(agentStatistics.uptime_seconds, "seconds")
                   .humanize()}
               </span>
-              <span className="badge text-bg-secondary">
+              <span className="badge bg-info text-dark">
                 CPU: {agentStatistics.cpu_usage}
               </span>
-              <span className="badge text-bg-secondary">
+              <span className="badge bg-info text-dark">
                 RAM: {agentStatistics.ram_usage}
               </span>
-              <span className="badge text-bg-secondary">
+              <span className="badge bg-info text-dark">
                 Disk: {agentStatistics.disk_usage}
               </span>
             </>
           ) : (
-            <span className="badge text-bg-secondary">No stats available</span>
+            <span className="badge bg-info text-dark">No stats available</span>
           )}
 
           {runCommandMutation.isPending ? (
-            <span className="badge text-bg-info">
+            <span className="badge bg-warning text-dark">
               Running{".".repeat(runningFrame + 1)}
             </span>
           ) : null}
@@ -404,11 +421,15 @@ export default function InteractiveShell() {
               downloadFileMutation.isPending
             }
           >
-            {downloadFileMutation.isPending ? "Downloading..." : "Download File"}
+            {downloadFileMutation.isPending
+              ? "Downloading..."
+              : "Download File"}
           </button>
 
           {transferStatusMessage ? (
-            <span className={`small shell-transfer-message ${transferStatusClass}`}>
+            <span
+              className={`small shell-transfer-message ${transferStatusClass}`}
+            >
               {transferStatusMessage}
             </span>
           ) : null}
@@ -416,7 +437,6 @@ export default function InteractiveShell() {
 
         <form onSubmit={handleSubmit}>
           <div className="input-group">
-            <span className="input-group-text">prompt$</span>
             <input
               id="shell-command"
               className="form-control"
@@ -437,7 +457,8 @@ export default function InteractiveShell() {
 
         {runCommandMutation.error ? (
           <div className="text-danger small mt-2">
-            Failed to send command: {(runCommandMutation.error as Error).message}
+            Failed to send command:{" "}
+            {(runCommandMutation.error as Error).message}
           </div>
         ) : null}
 
@@ -466,7 +487,10 @@ export default function InteractiveShell() {
                   <h5 className="card-title mb-3">Upload File</h5>
                   <form onSubmit={handleUploadSubmit}>
                     <div className="mb-2">
-                      <label className="form-label small mb-1" htmlFor="upload-file">
+                      <label
+                        className="form-label small mb-1"
+                        htmlFor="upload-file"
+                      >
                         File
                       </label>
                       <input
@@ -475,13 +499,18 @@ export default function InteractiveShell() {
                         type="file"
                         className="form-control form-control-sm"
                         onChange={(event) => {
-                          setSelectedUploadFile(event.target.files?.[0] ?? null);
+                          setSelectedUploadFile(
+                            event.target.files?.[0] ?? null,
+                          );
                         }}
                         disabled={uploadFileMutation.isPending}
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label small mb-1" htmlFor="upload-path">
+                      <label
+                        className="form-label small mb-1"
+                        htmlFor="upload-path"
+                      >
                         Destination Path
                       </label>
                       <input
@@ -505,9 +534,13 @@ export default function InteractiveShell() {
                       <button
                         type="submit"
                         className="btn btn-info btn-sm"
-                        disabled={!selectedUploadFile || uploadFileMutation.isPending}
+                        disabled={
+                          !selectedUploadFile || uploadFileMutation.isPending
+                        }
                       >
-                        {uploadFileMutation.isPending ? "Uploading..." : "Upload"}
+                        {uploadFileMutation.isPending
+                          ? "Uploading..."
+                          : "Upload"}
                       </button>
                     </div>
                   </form>
@@ -517,14 +550,19 @@ export default function InteractiveShell() {
                   <h5 className="card-title mb-3">Download File</h5>
                   <form onSubmit={handleDownloadSubmit}>
                     <div className="mb-3">
-                      <label className="form-label small mb-1" htmlFor="download-path">
+                      <label
+                        className="form-label small mb-1"
+                        htmlFor="download-path"
+                      >
                         Remote Path
                       </label>
                       <input
                         id="download-path"
                         className="form-control form-control-sm"
                         value={downloadPath}
-                        onChange={(event) => setDownloadPath(event.target.value)}
+                        onChange={(event) =>
+                          setDownloadPath(event.target.value)
+                        }
                         placeholder="/tmp/file.txt"
                         disabled={downloadFileMutation.isPending}
                       />
@@ -541,7 +579,9 @@ export default function InteractiveShell() {
                       <button
                         type="submit"
                         className="btn btn-success btn-sm"
-                        disabled={!downloadPath.trim() || downloadFileMutation.isPending}
+                        disabled={
+                          !downloadPath.trim() || downloadFileMutation.isPending
+                        }
                       >
                         {downloadFileMutation.isPending
                           ? "Downloading..."

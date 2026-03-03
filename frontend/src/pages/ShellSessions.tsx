@@ -67,7 +67,10 @@ export default function ShellSessions() {
   });
 
   function handleCreateShellSession(agentName: string) {
-    if (createShellSessionMutation.isPending || deleteShellSessionMutation.isPending) {
+    if (
+      createShellSessionMutation.isPending ||
+      deleteShellSessionMutation.isPending
+    ) {
       return;
     }
     setSuccessMessage(null);
@@ -76,7 +79,10 @@ export default function ShellSessions() {
   }
 
   function handleDeleteShellSession(uuid: string) {
-    if (deleteShellSessionMutation.isPending || createShellSessionMutation.isPending) {
+    if (
+      deleteShellSessionMutation.isPending ||
+      createShellSessionMutation.isPending
+    ) {
       return;
     }
     setSuccessMessage(null);
@@ -186,7 +192,9 @@ export default function ShellSessions() {
                     <button
                       type="button"
                       className="btn btn-link p-0 text-danger"
-                      onClick={() => handleDeleteShellSession(shellSession.uuid)}
+                      onClick={() =>
+                        handleDeleteShellSession(shellSession.uuid)
+                      }
                       disabled={
                         deleteShellSessionMutation.isPending ||
                         createShellSessionMutation.isPending
