@@ -51,7 +51,7 @@ class CreateShellSessionModel(BaseModel):
     },
 )
 async def create_shell_session(request: CreateShellSessionModel) -> UUID:
-    return shell_session_manager.create_session(agent_name=request.agent)
+    return await asyncio.to_thread(shell_session_manager.create_session, request.agent)
 
 
 @shell_router.delete(
@@ -66,7 +66,7 @@ async def create_shell_session(request: CreateShellSessionModel) -> UUID:
     },
 )
 async def delete_shell_session(uuid: UUID):
-    shell_session_manager.delete_session(uuid)
+    await asyncio.to_thread(shell_session_manager.delete_session, uuid)
     return Response(status_code=HTTPStatus.NO_CONTENT)
 
 
