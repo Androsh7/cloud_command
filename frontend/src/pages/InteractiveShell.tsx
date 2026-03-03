@@ -162,7 +162,6 @@ export default function InteractiveShell() {
           Command
         </label>
         <div className="input-group">
-          <span className="input-group-text">session$</span>
           <input
             id="shell-command"
             className="form-control"

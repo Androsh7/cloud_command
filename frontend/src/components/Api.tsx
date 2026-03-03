@@ -15,7 +15,7 @@ import {
 import { z, ZodType } from "zod";
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8080/api",
+  baseURL: "/api",
 });
 
 async function axiosZod<T>(
