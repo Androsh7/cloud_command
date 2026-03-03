@@ -31,8 +31,8 @@ class TmuxSendKeys(BaseModel):
 class ShellSession:
     agent: Agent = field(validator=validators.instance_of(Agent))
     uuid: UUID = field(validator=validators.instance_of(UUID), init=False)
-    command_connection: Connection = field(validator=validators.instance_of(Connection), init=False)
     tmux_exists: bool = field(validator=validators.instance_of(bool), init=False)
+    command_connection: Connection = field(validator=validators.instance_of(Connection), init=False)
     command_lock: threading.Lock = field(validator=validators.instance_of(threading.Lock), init=False)
     polling_connection: Connection = field(validator=validators.instance_of(Connection), init=False)
     polling_lock: threading.Lock = field(validator=validators.instance_of(threading.Lock), init=False)
@@ -68,6 +68,11 @@ class ShellSession:
             conn = self.auto_create_tmux_session()
             send_keys = request.send_command.replace('"', '\\"').replace("$", "\\$")
             conn.run(f'tmux send-keys -t {self.uuid} "{send_keys}" C-m')
+
+    def session_send_ctrl_c(self):
+        with self.command_lock:
+            conn = self.auto_create_tmux_session()
+            conn.run(f'tmux send-keys -t {self.uuid} C-c')
 
     def session_get_output(self) -> str:
         with self.command_lock:

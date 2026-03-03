@@ -141,6 +141,13 @@ export function sendShellCommand(uuid: string, sendCommand: string) {
   });
 }
 
+export function sendCtrlCShellCommand(uuid: string) {
+  return api.request<void>({
+    method: "POST",
+    url: `/shell/${uuid}/send_command_ctrl_c`,
+  });
+}
+
 export function getShellOutput(uuid: string): Promise<string> {
   return axiosZod(z.string(), {
     method: "GET",

@@ -85,6 +85,20 @@ async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Respon
     await asyncio.to_thread(shell_session.session_send_command, command)
     return Response(status_code=HTTPStatus.CREATED)
 
+@shell_router.post(
+    "/shell/{uuid}/send_command_ctrl_c",
+    responses={
+        HTTPStatus.CREATED: {"detail": "Sent command", "content": {}},
+        HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+        HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
+    },
+    status_code=HTTPStatus.CREATED
+)
+async def run_command_ctrl_c_shell_session(uuid: UUID) -> Response:
+    shell_session = shell_session_manager.get_session(uuid=uuid)
+    await asyncio.to_thread(shell_session.session_send_ctrl_c)
+    return Response(status_code=HTTPStatus.CREATED)
 
 @shell_router.get(
     "/shell/{uuid}/get_output",
