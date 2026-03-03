@@ -40,6 +40,8 @@ def main():
         parser.error("Both the private and public key must be specified")
     elif GENERATED_SSL_KEY.exists() and GENERATED_SSL_CERTIFICATE.exists():
         logger.warning("No SSL certificate specified, using existing self-signed certificate")
+        args.private_key_path = GENERATED_SSL_KEY
+        args.public_key_path = GENERATED_SSL_CERTIFICATE
     else:
         logger.warning("No SSL certificate specified, generating self-signed certificate")
         generate_self_signed_cert()
