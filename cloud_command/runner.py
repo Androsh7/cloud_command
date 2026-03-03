@@ -10,7 +10,7 @@ from loguru import logger
 
 # Project libraries
 from cloud_command.app import app
-from cloud_command.constants import VERSION, GENERATED_SSL_CERTIFICATE, GENERATED_SSL_KEY
+from cloud_command.constants import GENERATED_SSL_CERTIFICATE, GENERATED_SSL_KEY, VERSION
 from cloud_command.ssl_cert import generate_self_signed_cert
 
 
@@ -39,7 +39,7 @@ def main():
     elif args.private_key_path or args.public_key_path:
         parser.error("Both the private and public key must be specified")
     else:
-        logger.warning(f'No SSL certificate specified, Generating self-signed certificate')
+        logger.warning("No SSL certificate specified, Generating self-signed certificate")
         generate_self_signed_cert()
         args.private_key_path = GENERATED_SSL_KEY
         args.public_key_path = GENERATED_SSL_CERTIFICATE
