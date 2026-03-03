@@ -1,5 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useParams } from "react-router-dom";
 import {
   getShellOutput,
@@ -21,6 +28,20 @@ export default function InteractiveShell() {
     typeof document !== "undefined" ? document.hasFocus() : true,
   );
   const outputContainerRef = useRef<HTMLDivElement | null>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+  const bottomStripRef = useRef<HTMLDivElement | null>(null);
+  const [bottomStripHeight, setBottomStripHeight] = useState(0);
+
+  const scrollOutputToBottom = useCallback(() => {
+    const outputContainer = outputContainerRef.current;
+    const bottomAnchor = bottomAnchorRef.current;
+    if (!outputContainer) {
+      return;
+    }
+
+    outputContainer.scrollTop = outputContainer.scrollHeight;
+    bottomAnchor?.scrollIntoView({ block: "end" });
+  }, []);
 
   useEffect(() => {
     const handleFocus = () => setIsWindowFocused(true);
@@ -49,7 +70,7 @@ export default function InteractiveShell() {
       return getShellOutput(uuid);
     },
     enabled: Boolean(uuid) && isWindowFocused,
-    refetchInterval: 1500,
+    refetchInterval: 500,
   });
 
   const {
@@ -77,6 +98,9 @@ export default function InteractiveShell() {
     },
     onSuccess: () => {
       void refetchOutput();
+      window.setTimeout(() => void refetchOutput(), 120);
+      window.setTimeout(() => void refetchOutput(), 300);
+      scrollOutputToBottom();
     },
   });
 
@@ -87,6 +111,7 @@ export default function InteractiveShell() {
       return;
     }
     setCommand("");
+    scrollOutputToBottom();
     runCommandMutation.mutate(cmd);
   }
 
@@ -101,13 +126,47 @@ export default function InteractiveShell() {
     return () => window.clearInterval(intervalId);
   }, [runCommandMutation.isPending]);
 
+  useLayoutEffect(() => {
+    scrollOutputToBottom();
+  }, [terminalOutput, runCommandMutation.isPending, scrollOutputToBottom]);
+
   useEffect(() => {
     const outputContainer = outputContainerRef.current;
     if (!outputContainer) {
       return;
     }
-    outputContainer.scrollTop = outputContainer.scrollHeight;
-  }, [terminalOutput, runCommandMutation.isPending]);
+    const observer = new MutationObserver(() => {
+      scrollOutputToBottom();
+    });
+    observer.observe(outputContainer, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [scrollOutputToBottom]);
+
+  useLayoutEffect(() => {
+    const bottomStrip = bottomStripRef.current;
+    if (!bottomStrip) {
+      return;
+    }
+
+    const syncHeight = () => {
+      setBottomStripHeight(bottomStrip.offsetHeight);
+    };
+
+    syncHeight();
+    const resizeObserver = new ResizeObserver(syncHeight);
+    resizeObserver.observe(bottomStrip);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   if (!uuid) {
     return (
@@ -120,116 +179,101 @@ export default function InteractiveShell() {
   }
 
   return (
-    <div className="container mt-4">
-      <h1>Interactive Shell</h1>
-      <p className="text-muted mb-3">Shell session: {uuid}</p>
-
-      <div className="card">
-        <div
-          ref={outputContainerRef}
-          className="card-body bg-dark text-light"
-          style={{
-            minHeight: "360px",
-            maxHeight: "420px",
-            overflowY: "auto",
-            fontFamily: "monospace",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {isOutputLoading && !terminalOutput ? (
-            <p className="text-secondary mb-0">Loading terminal output...</p>
-          ) : outputError && !terminalOutput ? (
-            <p className="text-danger mb-0">
-              Failed to fetch output: {(outputError as Error).message}
-            </p>
-          ) : terminalOutput ? (
-            <pre className="mb-0 text-light">{terminalOutput}</pre>
-          ) : (
-            <p className="text-secondary mb-0">
-              Enter a command to start interacting with this shell session.
-            </p>
-          )}
-          {runCommandMutation.isPending ? (
-            <div className="text-secondary mt-2">
-              Running{".".repeat(runningFrame + 1)}
-            </div>
-          ) : null}
-        </div>
+    <div className="shell-page">
+      <div
+        ref={outputContainerRef}
+        className="shell-output"
+        style={{ paddingBottom: `${bottomStripHeight + 24}px` }}
+      >
+        {isOutputLoading && !terminalOutput ? (
+          <p className="text-secondary mb-0">Loading terminal output...</p>
+        ) : outputError && !terminalOutput ? (
+          <p className="text-danger mb-0">
+            Failed to fetch output: {(outputError as Error).message}
+          </p>
+        ) : terminalOutput ? (
+          <pre className="shell-output-pre">{terminalOutput}</pre>
+        ) : (
+          <p className="text-secondary mb-0">
+            Enter a command to start interacting with this shell session.
+          </p>
+        )}
+        <div ref={bottomAnchorRef} />
       </div>
 
-      <form className="mt-3" onSubmit={handleSubmit}>
-        <label className="form-label" htmlFor="shell-command">
-          Command
-        </label>
-        <div className="input-group">
-          <input
-            id="shell-command"
-            className="form-control"
-            value={command}
-            onChange={(event) => setCommand(event.target.value)}
-            placeholder="uname -a"
-            autoComplete="off"
-          />
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={runCommandMutation.isPending || !command.trim()}
-          >
-            {runCommandMutation.isPending ? "Running..." : "Run"}
-          </button>
+      <div ref={bottomStripRef} className="shell-bottom-strip">
+        <div className="shell-session-label">
+          Session: <code>{uuid}</code>
         </div>
-      </form>
 
-      {runCommandMutation.error ? (
-        <div className="alert alert-danger mt-3 mb-0">
-          Failed to send command: {(runCommandMutation.error as Error).message}
-        </div>
-      ) : null}
-
-      <div className="card mt-4">
-        <div className="card-header">Agent Statistics</div>
-        <div className="card-body">
+        <div className="shell-stats-row">
           {isStatisticsLoading ? (
-            <p className="mb-0 text-muted">Loading statistics...</p>
+            <span className="badge text-bg-secondary">Loading stats...</span>
           ) : statisticsError ? (
-            <p className="mb-0 text-danger">
-              Failed to fetch statistics: {(statisticsError as Error).message}
-            </p>
+            <span className="badge text-bg-danger">
+              Stats unavailable: {(statisticsError as Error).message}
+            </span>
           ) : agentStatistics ? (
-            <div className="row g-3">
-              <div className="col-sm-6 col-lg-3">
-                <div className="border rounded p-2">
-                  <div className="text-muted small">Uptime</div>
-                  <div>
-                    {dayjs
-                      .duration(agentStatistics.uptime_seconds, "seconds")
-                      .humanize()}
-                  </div>
-                </div>
-              </div>
-              <div className="col-sm-6 col-lg-3">
-                <div className="border rounded p-2">
-                  <div className="text-muted small">CPU Usage</div>
-                  <div>{agentStatistics.cpu_usage}</div>
-                </div>
-              </div>
-              <div className="col-sm-6 col-lg-3">
-                <div className="border rounded p-2">
-                  <div className="text-muted small">RAM Usage</div>
-                  <div>{agentStatistics.ram_usage}</div>
-                </div>
-              </div>
-              <div className="col-sm-6 col-lg-3">
-                <div className="border rounded p-2">
-                  <div className="text-muted small">Disk Usage</div>
-                  <div>{agentStatistics.disk_usage}</div>
-                </div>
-              </div>
-            </div>
+            <>
+              <span className="badge text-bg-secondary">
+                Uptime:{" "}
+                {dayjs
+                  .duration(agentStatistics.uptime_seconds, "seconds")
+                  .humanize()}
+              </span>
+              <span className="badge text-bg-secondary">
+                CPU: {agentStatistics.cpu_usage}
+              </span>
+              <span className="badge text-bg-secondary">
+                RAM: {agentStatistics.ram_usage}
+              </span>
+              <span className="badge text-bg-secondary">
+                Disk: {agentStatistics.disk_usage}
+              </span>
+            </>
           ) : (
-            <p className="mb-0 text-muted">No statistics available.</p>
+            <span className="badge text-bg-secondary">No stats available</span>
           )}
+
+          {runCommandMutation.isPending ? (
+            <span className="badge text-bg-info">
+              Running{".".repeat(runningFrame + 1)}
+            </span>
+          ) : null}
         </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="input-group">
+            <span className="input-group-text">prompt$</span>
+            <input
+              id="shell-command"
+              className="form-control"
+              value={command}
+              onChange={(event) => setCommand(event.target.value)}
+              placeholder="uname -a"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={runCommandMutation.isPending || !command.trim()}
+            >
+              {runCommandMutation.isPending ? "Running..." : "Run"}
+            </button>
+          </div>
+        </form>
+
+        {runCommandMutation.error ? (
+          <div className="text-danger small mt-2">
+            Failed to send command: {(runCommandMutation.error as Error).message}
+          </div>
+        ) : null}
+
+        {outputError && terminalOutput ? (
+          <div className="text-warning small mt-2">
+            Output polling degraded: {(outputError as Error).message}
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -3,3 +3,52 @@
   background-color: #363636 !important;
   color: #ffffff !important;
 }
+
+.shell-page {
+  height: calc(100dvh - 56px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+}
+
+.shell-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1rem 1.5rem;
+  background-color: #111111;
+  color: #f8f9fa;
+  font-family: "Courier New", Courier, monospace;
+}
+
+.shell-output-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: inherit;
+}
+
+.shell-bottom-strip {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  border-top: 1px solid #495057;
+  background-color: #1f1f1f;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.shell-session-label {
+  color: #adb5bd;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.shell-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
