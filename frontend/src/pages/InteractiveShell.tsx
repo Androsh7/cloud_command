@@ -13,6 +13,7 @@ import {
   getShellOutput,
   getShellStatistics,
   listShellSessions,
+  sendCtrlCShellCommand,
   sendShellCommand,
   uploadAgentFile,
 } from "../components/Api";
@@ -123,6 +124,21 @@ export default function InteractiveShell() {
         throw new Error("Shell session UUID is missing in route.");
       }
       return sendShellCommand(uuid, cmd);
+    },
+    onSuccess: () => {
+      void refetchOutput();
+      window.setTimeout(() => void refetchOutput(), 120);
+      window.setTimeout(() => void refetchOutput(), 300);
+      scrollOutputToBottom();
+    },
+  });
+
+  const sendCtrlCMutation = useMutation({
+    mutationFn: () => {
+      if (!uuid) {
+        throw new Error("Shell session UUID is missing in route.");
+      }
+      return sendCtrlCShellCommand(uuid);
     },
     onSuccess: () => {
       void refetchOutput();
@@ -425,6 +441,14 @@ export default function InteractiveShell() {
               ? "Downloading..."
               : "Download File"}
           </button>
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm"
+            onClick={() => sendCtrlCMutation.mutate()}
+            disabled={sendCtrlCMutation.isPending}
+          >
+            {sendCtrlCMutation.isPending ? "Sending Ctrl+C..." : "Send Ctrl+C"}
+          </button>
 
           {transferStatusMessage ? (
             <span
@@ -459,6 +483,12 @@ export default function InteractiveShell() {
           <div className="text-danger small mt-2">
             Failed to send command:{" "}
             {(runCommandMutation.error as Error).message}
+          </div>
+        ) : null}
+
+        {sendCtrlCMutation.error ? (
+          <div className="text-danger small mt-2">
+            Failed to send Ctrl+C: {(sendCtrlCMutation.error as Error).message}
           </div>
         ) : null}
 
