@@ -61,3 +61,44 @@ export const FileUploadModelSchema = z.object({
   mime_type: z.string(),
 });
 export type FileUploadModel = z.infer<typeof FileUploadModelSchema>;
+
+export const AgentUploadBodySchema = z.object({
+  file: z.instanceof(File),
+});
+export type AgentUploadBody = z.infer<typeof AgentUploadBodySchema>;
+
+export const ErrorResponseSchema = z.object({
+  error: z.string(),
+  details: z.string(),
+});
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+export const ValidationErrorSchema = z.object({
+  loc: z.array(z.union([z.string(), z.number().int()])),
+  msg: z.string(),
+  type: z.string(),
+  input: z.unknown().optional(),
+  ctx: z.record(z.string(), z.unknown()).optional(),
+});
+export type ValidationError = z.infer<typeof ValidationErrorSchema>;
+
+export const HTTPValidationErrorSchema = z.object({
+  detail: z.array(ValidationErrorSchema).optional(),
+});
+export type HTTPValidationError = z.infer<typeof HTTPValidationErrorSchema>;
+
+export const CreateShellSessionModelSchema = z.object({
+  agent: z.string(),
+});
+export type CreateShellSessionModel = z.infer<typeof CreateShellSessionModelSchema>;
+
+export const ShellSessionModelSchema = z.object({
+  agent_name: z.string(),
+  uuid: z.string().uuid(),
+});
+export type ShellSessionModel = z.infer<typeof ShellSessionModelSchema>;
+
+export const TmuxSendKeysSchema = z.object({
+  send_command: z.string(),
+});
+export type TmuxSendKeys = z.infer<typeof TmuxSendKeysSchema>;
