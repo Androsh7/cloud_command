@@ -68,7 +68,6 @@ def get_statistics(conn: Connection):
 
     # Get CPU usage
     cpu_usage_output = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
-    logger.debug(f"CPU usage output: {cpu_usage_output}")
     cpu_usage_matches = re.search(r"(\d+(\.\d+)?) id", cpu_usage_output)
     cpu_usage = f"{100 - float(cpu_usage_matches.group(1)):.2f}%"
 
