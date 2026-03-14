@@ -2,6 +2,7 @@
 
 # Standard libraries
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 # Third-party libraries
@@ -19,7 +20,6 @@ from cloud_command.router.command import command_router
 from cloud_command.router.error_model import ServerError
 from cloud_command.router.shell import shell_router
 
-
 async def status_update_loop():
     while True:
         try:
@@ -31,9 +31,18 @@ async def status_update_loop():
         await asyncio.sleep(STATUS_TRACKER_UPDATE_INTERVAL)
 
 
+def _windows_connection_reset_handler(loop, context):
+    """Suppress WinError 10054 from SSH connection teardown on Windows"""
+    if sys.platform == "win32" and isinstance(context.get("exception"), ConnectionResetError):
+        return
+    loop.default_exception_handler(context)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup actions
+    if sys.platform == "win32":
+        asyncio.get_event_loop().set_exception_handler(_windows_connection_reset_handler)
     agent_manager.load_all_agents()
     status_task = asyncio.create_task(status_update_loop())
 

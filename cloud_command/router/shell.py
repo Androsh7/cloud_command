@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 # Project libraries
 from cloud_command.command.commands import AgentStatusModel
 from cloud_command.command.shell_manager import ShellSession, TmuxSendKeys, shell_session_manager
+from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.router.error_model import ErrorResponse
 
 shell_router = APIRouter(tags=["Shell"])
@@ -45,12 +46,14 @@ class CreateShellSessionModel(BaseModel):
     "/shell/create",
     status_code=HTTPStatus.CREATED,
     responses={
+        HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
         HTTPStatus.BAD_REQUEST: {"model": ErrorResponse},
         HTTPStatus.CONFLICT: {"model": ErrorResponse},
         HTTPStatus.SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
 )
 async def create_shell_session(request: CreateShellSessionModel) -> UUID:
+    agent_manager.get_agent(request.agent)
     return await asyncio.to_thread(shell_session_manager.create_session, request.agent)
 
 

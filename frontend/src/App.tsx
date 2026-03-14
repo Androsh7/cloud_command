@@ -5,7 +5,6 @@ import "bootswatch/dist/slate/bootstrap.min.css";
 import "./App.css";
 import Navbar from "./components/Navbar";
 import InteractiveShell from "./pages/InteractiveShell";
-import Login from "./pages/Login";
 
 function NotFound() {
   return <div className="container mt-4">Page not found</div>;
@@ -24,11 +23,6 @@ export default function App() {
         <Route
           path="/shell/:uuid"
           element={<InteractiveShell />}
-          errorElement={<InternalError />}
-        />
-        <Route
-          path="/login"
-          element={<Login />}
           errorElement={<InternalError />}
         />
         <Route

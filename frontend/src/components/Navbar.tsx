@@ -31,17 +31,6 @@ export default function Navbar() {
                 Home
               </NavLink>
             </li>
-            <li className="nav-item">
-              <NavLink
-                to="/login"
-                className={({ isActive }) =>
-                  "nav-link route-block" +
-                  (isActive ? " active fw-bold text-info" : "")
-                }
-              >
-                Login
-              </NavLink>
-            </li>
           </ul>
         </div>
       </div>
