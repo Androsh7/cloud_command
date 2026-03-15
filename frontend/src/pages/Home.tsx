@@ -6,9 +6,11 @@ import {
   createShellSession,
   deleteAgent,
   deleteShellSession,
+  executeCommand,
   getAgents,
   listShellSessions,
 } from "../components/Api";
+import type { CommandResultModel } from "../components/Models";
 
 function shortUuid(uuid: string): string {
   return uuid.length > 12 ? `${uuid.slice(0, 8)}...${uuid.slice(-4)}` : uuid;
@@ -33,6 +35,11 @@ export default function Home() {
     null,
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const [runCommandAgent, setRunCommandAgent] = useState<string | null>(null);
+  const [runCommand, setRunCommand] = useState("");
+  const [commandResult, setCommandResult] = useState<CommandResultModel | null>(null);
+  const [runCommandFullscreen, setRunCommandFullscreen] = useState(false);
 
   const {
     data: agents,
@@ -121,6 +128,22 @@ export default function Home() {
     },
   });
 
+  const runCommandMutation = useMutation({
+    mutationFn: ({
+      agentName,
+      command,
+    }: {
+      agentName: string;
+      command: string;
+    }) => executeCommand(agentName, command),
+    onSuccess: (result) => {
+      setCommandResult(result);
+    },
+    onError: (error) => {
+      setStatusMessage(`Command failed: ${(error as Error).message}`);
+    },
+  });
+
   const deleteShellSessionMutation = useMutation({
     mutationFn: (uuid: string) => deleteShellSession(uuid),
     onSuccess: (_, uuid) => {
@@ -147,6 +170,13 @@ export default function Home() {
     }
     setStatusMessage(null);
     deleteAgentMutation.mutate(agentPendingDelete);
+  }
+
+  function handleRunCommand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!runCommandAgent) return;
+    setCommandResult(null);
+    runCommandMutation.mutate({ agentName: runCommandAgent, command: runCommand });
   }
 
   function handleCreateShell(agentName: string) {
@@ -202,6 +232,24 @@ export default function Home() {
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [agentPendingDelete, deleteAgentMutation.isPending]);
+
+  useEffect(() => {
+    if (!runCommandAgent) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !runCommandMutation.isPending) {
+        setRunCommandAgent(null);
+        setRunCommand("");
+        setCommandResult(null);
+        setRunCommandFullscreen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [runCommandAgent, runCommandMutation.isPending]);
 
   if (isAgentsLoading || isShellSessionsLoading) {
     return <div className="container mt-4">Loading hub...</div>;
@@ -334,6 +382,18 @@ export default function Home() {
                         creatingShellForAgent === agent.name
                           ? "Adding shell..."
                           : "+"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm"
+                        title={`Run command on ${agent.name}`}
+                        onClick={() => {
+                          setRunCommandAgent(agent.name);
+                          setRunCommand("");
+                          setCommandResult(null);
+                        }}
+                      >
+                        &gt;_
                       </button>
                     </div>
                   </div>
@@ -493,6 +553,120 @@ export default function Home() {
                   {deleteAgentMutation.isPending ? "Deleting..." : "Delete"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {runCommandAgent ? (
+        <div
+          className="shell-transfer-dialog-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!runCommandMutation.isPending) {
+              setRunCommandAgent(null);
+              setRunCommand("");
+              setCommandResult(null);
+              setRunCommandFullscreen(false);
+            }
+          }}
+        >
+          <div
+            className={`${runCommandFullscreen ? "run-command-dialog-fullscreen" : "shell-transfer-dialog"} card`}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5 className="card-title mb-0">
+                  Run Command &mdash; {runCommandAgent}
+                </h5>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  title={runCommandFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  onClick={() => setRunCommandFullscreen((v) => !v)}
+                >
+                  {runCommandFullscreen ? "⊡" : "⛶"}
+                </button>
+              </div>
+              <form onSubmit={handleRunCommand}>
+                <div className="mb-2">
+                  <label
+                    className="form-label small mb-1"
+                    htmlFor="run-command-input"
+                  >
+                    Command
+                  </label>
+                  <input
+                    id="run-command-input"
+                    className="form-control form-control-sm"
+                    value={runCommand}
+                    onChange={(event) => setRunCommand(event.target.value)}
+                    placeholder="ls -la"
+                    required
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                  />
+                </div>
+                <div className="d-flex justify-content-end gap-2 mb-3">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setRunCommandAgent(null);
+                      setRunCommand("");
+                      setCommandResult(null);
+                      setRunCommandFullscreen(false);
+                    }}
+                    disabled={runCommandMutation.isPending}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-sm"
+                    disabled={runCommandMutation.isPending}
+                  >
+                    {runCommandMutation.isPending ? "Running..." : "Run"}
+                  </button>
+                </div>
+              </form>
+              {commandResult ? (
+                <div>
+                  <div className="d-flex align-items-center gap-2 mb-2">
+                    <span className="small fw-semibold">Exit code:</span>
+                    <span
+                      className={`badge ${commandResult.exit_code === 0 ? "text-bg-success" : "text-bg-danger"}`}
+                    >
+                      {commandResult.exit_code}
+                    </span>
+                  </div>
+                  {commandResult.stdout ? (
+                    <div className="mb-2">
+                      <div className="small fw-semibold mb-1">stdout</div>
+                      <pre
+                        className={`run-command-output${runCommandFullscreen ? " run-command-output-expanded" : ""}`}
+                      >
+                        {commandResult.stdout}
+                      </pre>
+                    </div>
+                  ) : null}
+                  {commandResult.stderr ? (
+                    <div className="mb-2">
+                      <div className="small fw-semibold mb-1 text-danger">
+                        stderr
+                      </div>
+                      <pre
+                        className={`run-command-output text-danger${runCommandFullscreen ? " run-command-output-expanded" : ""}`}
+                      >
+                        {commandResult.stderr}
+                      </pre>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
