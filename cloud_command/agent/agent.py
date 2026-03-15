@@ -109,7 +109,7 @@ class Agent(AbstractAgent):
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def from_config(cls, config_path: Path) -> "Agent":
+    def from_config(cls, config_path: Path):
         with open(file=config_path, encoding="utf-8") as config_file:
             payload = json.load(config_file)
 
