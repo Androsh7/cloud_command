@@ -21,6 +21,7 @@ from cloud_command.router.command import command_router
 from cloud_command.router.error_model import ServerError
 from cloud_command.router.shell import shell_router
 
+
 async def status_update_loop():
     while True:
         try:

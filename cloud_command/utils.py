@@ -55,4 +55,4 @@ def create_ssh_key_pair(output_dir: Path) -> SshKeyPair:
 
 
 def encode_script(script: str, executable: str = "/bin/bash", sudo: bool = False) -> str:
-    return f'{'sudo ' if sudo else ''}{executable} -c "$(echo {base64.b64encode(script.encode("utf-8")).decode("utf-8")} | base64 -d)" '
+    return f'{"sudo " if sudo else ""}{executable} -c "$(echo {base64.b64encode(script.encode("utf-8")).decode("utf-8")} | base64 -d)" '

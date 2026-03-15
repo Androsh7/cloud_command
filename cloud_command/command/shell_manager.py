@@ -74,7 +74,7 @@ class ShellSession:
     def session_send_ctrl_c(self):
         with self.command_lock:
             conn = self.auto_create_tmux_session()
-            conn.run(f'tmux send-keys -t {self.uuid} C-c')
+            conn.run(f"tmux send-keys -t {self.uuid} C-c")
 
     def session_get_output(self) -> tuple[bool, str]:
         """Returns a boolean for if the data has changed, then the content of stdout"""

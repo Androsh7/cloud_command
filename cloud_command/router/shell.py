@@ -10,9 +10,9 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel, Field
 
 # Project libraries
+from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.command.commands import AgentStatusModel
 from cloud_command.command.shell_manager import ShellSession, TmuxSendKeys, shell_session_manager
-from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.router.error_model import ErrorResponse, ServerError
 
 shell_router = APIRouter(tags=["Shell"])
@@ -55,7 +55,11 @@ class CreateShellSessionModel(BaseModel):
 async def create_shell_session(request: CreateShellSessionModel) -> UUID:
     agent = agent_manager.get_agent(request.agent)
     if agent.public_ip_address is None:
-        raise ServerError(status_code=HTTPStatus.SERVICE_UNAVAILABLE, error="EC2 unavailable", details="EC2 is still pending an IP address assignment")
+        raise ServerError(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            error="EC2 unavailable",
+            details="EC2 is still pending an IP address assignment",
+        )
     return await asyncio.to_thread(shell_session_manager.create_session, request.agent)
 
 
@@ -90,6 +94,7 @@ async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Respon
     await asyncio.to_thread(shell_session.session_send_command, command)
     return Response(status_code=HTTPStatus.CREATED)
 
+
 @shell_router.post(
     "/shell/{uuid}/send_command_ctrl_c",
     responses={
@@ -98,12 +103,13 @@ async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Respon
         HTTPStatus.INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
         HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
     },
-    status_code=HTTPStatus.CREATED
+    status_code=HTTPStatus.CREATED,
 )
 async def run_command_ctrl_c_shell_session(uuid: UUID) -> Response:
     shell_session = shell_session_manager.get_session(uuid=uuid)
     await asyncio.to_thread(shell_session.session_send_ctrl_c)
     return Response(status_code=HTTPStatus.CREATED)
+
 
 @shell_router.get(
     "/shell/{uuid}/get_output",
@@ -119,6 +125,7 @@ async def get_output_shell_session(uuid: UUID, show_existing: bool = False) -> s
     if has_change or show_existing:
         return content
     return None
+
 
 @shell_router.post(
     "/shell/{uuid}/get_statistics",

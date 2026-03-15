@@ -25,7 +25,7 @@ from cloud_command.agent.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
-from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT, ARCHITECTURES
+from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, ARCHITECTURES, AWS_EC2_STATES, SSH_TIMEOUT
 from cloud_command.router.error_model import ServerError
 from cloud_command.utils import SshKeyPair, create_ssh_key_pair
 
@@ -34,7 +34,9 @@ from cloud_command.utils import SshKeyPair, create_ssh_key_pair
 class Ec2Config:
     instance_type: str = field(validator=validators.instance_of(str))
     region: str = field(validator=validators.instance_of(str))
-    architecture: Literal[*ARCHITECTURES] = field(default="arm", validator=validators.and_(validators.instance_of(str), validators.in_(ARCHITECTURES)))
+    architecture: Literal[*ARCHITECTURES] = field(
+        default="arm", validator=validators.and_(validators.instance_of(str), validators.in_(ARCHITECTURES))
+    )
     ami_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     instance_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     vpc_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))

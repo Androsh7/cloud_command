@@ -9,7 +9,6 @@ from pathlib import PurePosixPath
 # Third-party libraries
 from fabric import Connection
 from fastapi import UploadFile
-from loguru import logger
 from pydantic import BaseModel, Field
 
 # Project libraries

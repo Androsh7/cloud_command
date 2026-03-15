@@ -69,7 +69,9 @@ class AgentManager:
                     detail=f"Agent with name {name} already exists",
                 )
 
-        agent = Agent(name=name, config=Ec2Config(instance_type=instance_type, region=region, architecture=architecture))
+        agent = Agent(
+            name=name, config=Ec2Config(instance_type=instance_type, region=region, architecture=architecture)
+        )
         await asyncio.to_thread(agent.build)
         agent.dump_config()
 

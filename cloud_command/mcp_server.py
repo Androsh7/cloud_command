@@ -4,10 +4,13 @@
 from mcp.server.fastmcp import FastMCP
 
 # Project libraries
-from cloud_command.router.agent import get_cluster_list, get_agent_state, create_ec2_agent, delete_agent
-from cloud_command.router.command import agent_run_command, agent_command_status
+from cloud_command.router.agent import create_ec2_agent, delete_agent, get_agent_state, get_cluster_list
+from cloud_command.router.command import agent_command_status, agent_run_command
 
-mcp = FastMCP(name="CloudCommand", streamable_http_path="/", instructions="""\
+mcp = FastMCP(
+    name="CloudCommand",
+    streamable_http_path="/",
+    instructions="""\
 You are an agent for creating, managing, and utilizing short-lived EC2 instances
 
 Rules:
@@ -63,7 +66,8 @@ AWS regions:
 | ap-southeast-7 | Asia Pacific (Thailand) | 3 | Thailand |
 | ap-east-1 | Asia Pacific (Hong Kong) | 3 | Hong Kong |
 | ap-east-2 | Asia Pacific (Taipei) | 3 | Taiwan |
-""")
+""",
+)
 
 # Agent router
 mcp.add_tool(get_cluster_list)

@@ -2,14 +2,14 @@
 
 # Standard libraries
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 # Third-party libraries
 import boto3
 from attrs import define, field, validators
-from tqdm import tqdm
 from botocore.exceptions import ClientError
 from loguru import logger
+from tqdm import tqdm
 
 
 def load_regions() -> list[str]:
@@ -26,11 +26,13 @@ def load_regions() -> list[str]:
 
     return sorted(set(out_list))
 
+
 @define
 class DetachedAgent:
     id: str = field(validator=validators.instance_of(str))
-    key_pair: Optional[str] = field(validator=validators.optional(validators.instance_of(str)))
+    key_pair: str | None = field(validator=validators.optional(validators.instance_of(str)))
     region: str = field(validator=validators.instance_of(str))
+
 
 def list_all_ec2s() -> list[DetachedAgent]:
     out_list = []
@@ -46,6 +48,7 @@ def list_all_ec2s() -> list[DetachedAgent]:
                             DetachedAgent(id=instance["InstanceId"], key_pair=instance.get("KeyName"), region=region)
                         )
     return out_list
+
 
 def create_ec2_key_pair(region: str, key_pair_name: str, public_key_path: Path):
     """Create an SSH key pair, automatically replaces existing key pairs with the same name
