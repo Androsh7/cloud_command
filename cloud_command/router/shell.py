@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from cloud_command.command.commands import AgentStatusModel
 from cloud_command.command.shell_manager import ShellSession, TmuxSendKeys, shell_session_manager
 from cloud_command.agent.agent_manager import agent_manager
-from cloud_command.router.error_model import ErrorResponse
+from cloud_command.router.error_model import ErrorResponse, ServerError
 
 shell_router = APIRouter(tags=["Shell"])
 
@@ -53,7 +53,9 @@ class CreateShellSessionModel(BaseModel):
     },
 )
 async def create_shell_session(request: CreateShellSessionModel) -> UUID:
-    agent_manager.get_agent(request.agent)
+    agent = agent_manager.get_agent(request.agent)
+    if agent.public_ip_address is None:
+        raise ServerError(status_code=HTTPStatus.SERVICE_UNAVAILABLE, error="EC2 unavailable", details="EC2 is still pending an IP address assignment")
     return await asyncio.to_thread(shell_session_manager.create_session, request.agent)
 
 
@@ -111,10 +113,12 @@ async def run_command_ctrl_c_shell_session(uuid: UUID) -> Response:
         HTTPStatus.NOT_FOUND: {"model": ErrorResponse},
     },
 )
-async def get_output_shell_session(uuid: UUID) -> str:
+async def get_output_shell_session(uuid: UUID, show_existing: bool = False) -> str | None:
     shell_session = shell_session_manager.get_session(uuid=uuid)
-    return await asyncio.to_thread(shell_session.session_get_output)
-
+    has_change, content = await asyncio.to_thread(shell_session.session_get_output)
+    if has_change or show_existing:
+        return content
+    return None
 
 @shell_router.post(
     "/shell/{uuid}/get_statistics",

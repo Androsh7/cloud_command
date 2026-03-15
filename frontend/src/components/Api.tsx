@@ -148,10 +148,11 @@ export function sendCtrlCShellCommand(uuid: string) {
   });
 }
 
-export function getShellOutput(uuid: string): Promise<string> {
-  return axiosZod(z.string(), {
+export function getShellOutput(uuid: string, showExisting?: boolean): Promise<string | null> {
+  return axiosZod(z.string().nullable(), {
     method: "GET",
     url: `/shell/${uuid}/get_output`,
+    params: showExisting ? { show_existing: true } : undefined,
   });
 }
 

@@ -31,6 +31,8 @@ export default function InteractiveShell() {
   const [isWindowFocused, setIsWindowFocused] = useState(() =>
     typeof document !== "undefined" ? document.hasFocus() : true,
   );
+  const isFirstFetch = useRef(true);
+  const lastNonNullOutput = useRef<string | null>(null);
   const outputContainerRef = useRef<HTMLDivElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -71,17 +73,23 @@ export default function InteractiveShell() {
   }, []);
 
   const {
-    data: terminalOutput,
+    data: displayedOutput,
     isLoading: isOutputLoading,
     error: outputError,
     refetch: refetchOutput,
   } = useQuery({
     queryKey: ["shellOutput", uuid],
-    queryFn: () => {
+    queryFn: async () => {
       if (!uuid) {
         throw new Error("Shell session UUID is missing in route.");
       }
-      return getShellOutput(uuid);
+      const showExisting = isFirstFetch.current;
+      isFirstFetch.current = false;
+      const result = await getShellOutput(uuid, showExisting);
+      if (result !== null) {
+        lastNonNullOutput.current = result;
+      }
+      return lastNonNullOutput.current;
     },
     enabled: Boolean(uuid) && isWindowFocused,
     refetchInterval: 500,
@@ -323,7 +331,7 @@ export default function InteractiveShell() {
 
   useLayoutEffect(() => {
     scrollOutputToBottom();
-  }, [terminalOutput, runCommandMutation.isPending, scrollOutputToBottom]);
+  }, [displayedOutput, runCommandMutation.isPending, scrollOutputToBottom]);
 
   useEffect(() => {
     const outputContainer = outputContainerRef.current;
@@ -357,14 +365,14 @@ export default function InteractiveShell() {
   return (
     <div className="shell-page">
       <div ref={outputContainerRef} className="shell-output">
-        {isOutputLoading && !terminalOutput ? (
+        {isOutputLoading && !displayedOutput ? (
           <p className="text-secondary mb-0">Loading terminal output...</p>
-        ) : outputError && !terminalOutput ? (
+        ) : outputError && !displayedOutput ? (
           <p className="text-danger mb-0">
             Failed to fetch output: {(outputError as Error).message}
           </p>
-        ) : terminalOutput ? (
-          <pre className="shell-output-pre">{terminalOutput}</pre>
+        ) : displayedOutput ? (
+          <pre className="shell-output-pre">{displayedOutput}</pre>
         ) : (
           <p className="text-secondary mb-0">
             Enter a command to start interacting with this shell session.
@@ -492,7 +500,7 @@ export default function InteractiveShell() {
           </div>
         ) : null}
 
-        {outputError && terminalOutput ? (
+        {outputError && displayedOutput ? (
           <div className="text-warning small mt-2">
             Output polling degraded: {(outputError as Error).message}
           </div>

@@ -32,6 +32,7 @@ class ShellSession:
     agent: Agent = field(validator=validators.instance_of(Agent))
     uuid: UUID = field(validator=validators.instance_of(UUID), init=False)
     tmux_exists: bool = field(validator=validators.instance_of(bool), init=False)
+    command_content: str = field(validator=validators.instance_of(str), init=False)
     command_connection: Connection = field(validator=validators.instance_of(Connection), init=False)
     command_lock: threading.Lock = field(validator=validators.instance_of(threading.Lock), init=False)
     polling_connection: Connection = field(validator=validators.instance_of(Connection), init=False)
@@ -40,6 +41,7 @@ class ShellSession:
     def __attrs_post_init__(self):
         self.uuid = uuid4()
         self.command_lock = threading.Lock()
+        self.command_content = ""
         self.command_connection = self.agent.connection()
         self.command_connection.run(
             "sudo yum install -y tmux || sudo dnf install -y tmux || sudo apt-get install -y tmux", hide="both"
@@ -74,11 +76,14 @@ class ShellSession:
             conn = self.auto_create_tmux_session()
             conn.run(f'tmux send-keys -t {self.uuid} C-c')
 
-    def session_get_output(self) -> str:
+    def session_get_output(self) -> tuple[bool, str]:
+        """Returns a boolean for if the data has changed, then the content of stdout"""
         with self.command_lock:
             conn = self.auto_create_tmux_session()
-            result = conn.run(f"tmux capture-pane -t {self.uuid} -p -J -S -", hide=True)
-            return result.stdout.strip()
+            result = conn.run(f"tmux capture-pane -t {self.uuid} -p -J -S -", hide=True).stdout.strip()
+            has_change = not (result == self.command_content)
+            self.command_content = result
+            return has_change, result
 
     def session_get_statistics(self) -> AgentStatusModel:
         with self.polling_lock:
