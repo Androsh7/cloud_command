@@ -136,7 +136,7 @@ def create_ec2(
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "Name", "Value": name},
-                    {"Key": "Type", "Value": "scan_cue_scanner"},
+                    {"Key": "Type", "Value": "cloud_command"},
                 ],
             }
         ],
