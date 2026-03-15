@@ -54,9 +54,7 @@ async def lifespan(app: FastAPI):
         status_task.cancel()
 
 
-app = FastAPI(
-    title="CloudCommand", docs_url="/api/docs", openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan
-)
+app = FastAPI(title="CloudCommand", docs_url=None, openapi_url="/api/openapi.json", version=VERSION, lifespan=lifespan)
 app.include_router(cluster_router, prefix="/api")
 app.include_router(command_router, prefix="/api")
 app.include_router(shell_router, prefix="/api")

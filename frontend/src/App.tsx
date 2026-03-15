@@ -4,6 +4,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "bootswatch/dist/slate/bootstrap.min.css";
 import "./App.css";
 import Navbar from "./components/Navbar";
+import ApiDocs from "./pages/ApiDocs";
 import InteractiveShell from "./pages/InteractiveShell";
 
 function NotFound() {
@@ -25,6 +26,7 @@ export default function App() {
           element={<InteractiveShell />}
           errorElement={<InternalError />}
         />
+        <Route path="/docs" element={<ApiDocs />} errorElement={<InternalError />} />
         <Route
           path="*"
           element={<NotFound />}

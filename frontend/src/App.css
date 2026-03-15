@@ -95,3 +95,116 @@
   background-color: #262626;
   border: 1px solid #495057;
 }
+
+/* ---- Swagger UI Dark Mode ---- */
+.swagger-ui * {
+  color: #ffffff !important;
+}
+
+.swagger-ui,
+.swagger-ui .wrapper,
+.swagger-ui .scheme-container {
+  background-color: #272b30 !important;
+}
+
+.swagger-ui .topbar {
+  display: none;
+}
+
+.swagger-ui .opblock {
+  background: #3a3f44 !important;
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .opblock .opblock-summary,
+.swagger-ui .opblock-tag {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .opblock .opblock-section-header {
+  background: #313539 !important;
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui table tbody tr td {
+  background-color: #272b30 !important;
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui table thead tr th,
+.swagger-ui table thead tr td {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui textarea,
+.swagger-ui input[type="text"],
+.swagger-ui input[type="email"],
+.swagger-ui input[type="password"],
+.swagger-ui input[type="search"],
+.swagger-ui select {
+  background-color: #3a3f44 !important;
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .model-box,
+.swagger-ui section.models .model-container {
+  background-color: #3a3f44 !important;
+}
+
+.swagger-ui section.models {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .response-body pre,
+.swagger-ui .microlight,
+.swagger-ui .highlight-code {
+  background-color: #1a1d20 !important;
+}
+
+.swagger-ui .responses-wrapper,
+.swagger-ui .response {
+  background-color: #272b30 !important;
+}
+
+.swagger-ui .btn {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .btn.authorize,
+.swagger-ui .btn.execute {
+  background-color: #3a3f44 !important;
+  border-color: #5b9bd1 !important;
+}
+
+.swagger-ui .dialog-ux .modal-ux {
+  background-color: #272b30 !important;
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .dialog-ux .modal-ux-header {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui .arrow {
+  fill: #ffffff !important;
+}
+
+.swagger-ui section.models,
+.swagger-ui .json-schema-2020-12,
+.swagger-ui .json-schema-2020-12-head,
+.swagger-ui .json-schema-2020-12-accordion,
+.swagger-ui .json-schema-2020-12-expand-deep-button {
+  background-color: #3a3f44 !important;
+}
+
+.swagger-ui .json-schema-2020-12-body {
+  border-color: #4b5157 !important;
+}
+
+.swagger-ui table.parameters {
+  border-left: 3px solid #4b5157 !important;
+}
+
+.swagger-ui .parameters-col_name {
+  padding-left: 12px !important;
+}

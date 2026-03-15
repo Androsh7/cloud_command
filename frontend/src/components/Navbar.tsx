@@ -31,6 +31,17 @@ export default function Navbar() {
                 Home
               </NavLink>
             </li>
+            <li className="nav-item">
+              <NavLink
+                to="/docs"
+                className={({ isActive }) =>
+                  "nav-link route-block" +
+                  (isActive ? " active fw-bold text-info" : "")
+                }
+              >
+                API Docs
+              </NavLink>
+            </li>
           </ul>
         </div>
       </div>

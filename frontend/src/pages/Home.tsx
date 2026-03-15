@@ -87,7 +87,7 @@ export default function Home() {
       setName("");
       setRegion("us-east-1");
       setInstanceType("t4g.nano");
-      setArchitecture("arm");
+      setArchitecture("arm64");
     },
     onError: (error) => {
       setStatusMessage(`Failed to create agent: ${(error as Error).message}`);
