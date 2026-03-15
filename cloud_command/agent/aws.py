@@ -2,7 +2,6 @@
 
 # Standard libraries
 from pathlib import Path
-from typing import Literal
 
 # Third-party libraries
 import boto3
@@ -10,6 +9,9 @@ from attrs import define, field, validators
 from botocore.exceptions import ClientError
 from loguru import logger
 from tqdm import tqdm
+
+# Project libraries
+from cloud_command.constants import ARCHITECTURES
 
 
 def load_regions() -> list[str]:
@@ -104,7 +106,7 @@ def get_vpc_subnet_id(region: str, vpc_id: str) -> str:
     ][0]["SubnetId"]
 
 
-def get_ami_id(region: str, architecture: Literal["arm", "x86"] = "arm") -> str:
+def get_ami_id(region: str, architecture: ARCHITECTURES = ARCHITECTURES.x86_64) -> str:
     """Returns the AMI ID for the amazon linux 2023 in the region with the specified architecture
 
     Args:
@@ -114,7 +116,7 @@ def get_ami_id(region: str, architecture: Literal["arm", "x86"] = "arm") -> str:
     Returns:
         Returns the AMI ID
     """
-    ssm_arch = "arm64" if architecture == "arm" else "x86_64"
+    ssm_arch = architecture
     return boto3.client("ssm", region_name=region).get_parameter(
         Name=f"/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-{ssm_arch}"
     )["Parameter"]["Value"]

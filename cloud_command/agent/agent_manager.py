@@ -11,7 +11,7 @@ from loguru import logger
 
 # Project libraries
 from cloud_command.agent.agent import Agent, Ec2Config
-from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY
+from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, ARCHITECTURES
 from cloud_command.router.error_model import ServerError
 
 
@@ -59,14 +59,14 @@ class AgentManager:
         """Update the status of all agents."""
         await asyncio.gather(*(asyncio.to_thread(agent.get_state) for agent in self.agent_list))
 
-    async def create_ec2_agent(self, name: str, instance_type: str, region: str, architecture: str) -> Agent:
+    async def create_ec2_agent(self, name: str, instance_type: str, region: str, architecture: ARCHITECTURES) -> Agent:
         """Create and persist a new EC2-backed agent."""
         with self._lock:
             if any(existing_agent.name == name for existing_agent in self.agent_list):
                 raise ServerError(
                     status_code=HTTPStatus.CONFLICT,
                     error="Conflict error",
-                    detail=f"Agent with name {name} already exists",
+                    details=f"Agent with name {name} already exists",
                 )
 
         agent = Agent(

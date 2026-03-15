@@ -4,7 +4,6 @@
 import asyncio
 from http import HTTPStatus
 from pathlib import Path
-from typing import Literal
 
 # Third-party libraries
 from fastapi import APIRouter, Response
@@ -12,6 +11,7 @@ from pydantic import BaseModel, Field
 
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
+from cloud_command.constants import ARCHITECTURES
 from cloud_command.router.error_model import ErrorResponse
 
 cluster_router = APIRouter(tags=["Agent"])
@@ -25,12 +25,12 @@ class SshKeyPairModel(BaseModel):
 class AgentConfigModel(BaseModel):
     instance_type: str = Field(examples=["t4g.nano"])
     region: str = Field(examples=["us-east-2"])
-    ami_id: str = Field(examples=["ami-0c55b159cbfafe1f0"])
-    instance_id: str = Field(examples=["i-1234567890abcdef0"])
-    vpc_id: str = Field(examples=["vpc-12345678"])
-    subnet_id: str = Field(examples=["subnet-12345678"])
-    security_group_id: str = Field(examples=["sg-12345678"])
-    key_pair_name: str = Field(examples=["my-key-pair"])
+    ami_id: str | None = Field(examples=["ami-0c55b159cbfafe1f0"])
+    instance_id: str | None = Field(examples=["i-1234567890abcdef0"])
+    vpc_id: str | None = Field(examples=["vpc-12345678"])
+    subnet_id: str | None = Field(examples=["subnet-12345678"])
+    security_group_id: str | None = Field(examples=["sg-12345678"])
+    key_pair_name: str | None = Field(examples=["my-key-pair"])
     key_pair: SshKeyPairModel
 
     @classmethod
@@ -74,7 +74,7 @@ async def get_cluster_list() -> list[AgentModel]:
 class CreateEC2AgentModel(BaseModel):
     region: str = Field(examples=["us-east-2"])
     instance_type: str = Field(examples=["t4g.nano"])
-    architecture: Literal["x86", "arm"] = Field(default="arm", examples=["arm"])
+    architecture: ARCHITECTURES = Field(default=ARCHITECTURES.arm64, examples=[ARCHITECTURES.arm64])
 
 
 @cluster_router.post(

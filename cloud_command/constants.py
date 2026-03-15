@@ -2,6 +2,7 @@
 
 # Standard libraries
 import sys
+from enum import StrEnum
 from pathlib import Path
 
 # Directories
@@ -31,6 +32,17 @@ SSH_TIMEOUT = 10
 GENERATED_SSL_CERTIFICATE = PARENT_DIRECTORY / "frontend" / "self-signed.crt"
 GENERATED_SSL_KEY = PARENT_DIRECTORY / "frontend" / "self-signed.key"
 
+
 # AWS
-AWS_EC2_STATES = ("pending", "running", "shutting-down", "terminated", "stopping", "stopped")
-ARCHITECTURES = ["x86", "arm"]
+class AWS_EC2_STATES(StrEnum):
+    pending = "pending"
+    running = "running"
+    shutting_down = "shutting-down"
+    terminated = "terminated"
+    stopping = "stopping"
+    stopped = "stopped"
+
+
+class ARCHITECTURES(StrEnum):
+    x86_64 = "x86_64"
+    arm64 = "arm64"

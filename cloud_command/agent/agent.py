@@ -7,7 +7,7 @@ import sys
 from http import HTTPStatus
 from ipaddress import IPv4Address
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 # Third-party libraries
 import boto3
@@ -34,9 +34,7 @@ from cloud_command.utils import SshKeyPair, create_ssh_key_pair
 class Ec2Config:
     instance_type: str = field(validator=validators.instance_of(str))
     region: str = field(validator=validators.instance_of(str))
-    architecture: Literal[*ARCHITECTURES] = field(
-        default="arm", validator=validators.and_(validators.instance_of(str), validators.in_(ARCHITECTURES))
-    )
+    architecture: ARCHITECTURES = field(default=ARCHITECTURES.arm64, validator=validators.instance_of(ARCHITECTURES))
     ami_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     instance_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     vpc_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
@@ -95,9 +93,9 @@ class Agent(AbstractAgent):
     config: Ec2Config = field(validator=validators.instance_of(Ec2Config))
     delete_on_exit: bool = field(default=True, validator=validators.instance_of(bool))
     config_dir: Path = field(init=False, validator=validators.instance_of(Path))
-    instance_state: str = field(
-        default="pending",
-        validator=validators.and_(validators.instance_of(str), validators.in_(AWS_EC2_STATES)),
+    instance_state: AWS_EC2_STATES = field(
+        default=AWS_EC2_STATES.pending,
+        validator=validators.instance_of(AWS_EC2_STATES),
     )
     public_ip_address: IPv4Address | None = field(
         default=None,
@@ -117,7 +115,7 @@ class Agent(AbstractAgent):
             name=payload["name"],
             config=Ec2Config.from_dict(payload["config"]),
             delete_on_exit=payload.get("delete_on_exit", True),
-            instance_state=payload.get("instance_state", "pending"),
+            instance_state=AWS_EC2_STATES(payload.get("instance_state", "pending")),
         )
         if payload.get("config_dir"):
             agent.config_dir = Path(payload["config_dir"])
@@ -196,7 +194,7 @@ class Agent(AbstractAgent):
             security_group_id=self.config.security_group_id,
             name=self.name,
         )
-        self.instance_state = "pending"
+        self.instance_state = AWS_EC2_STATES.pending
 
     def connection(self) -> Connection:
         """Create a fabric connection object."""
@@ -204,19 +202,19 @@ class Agent(AbstractAgent):
             raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
                 error="Agent error",
-                detail=f"Agent {self.name} is not running. Current state: {self.get_state()}",
+                details=f"Agent {self.name} is not running. Current state: {self.get_state()}",
             )
         if not self.public_ip_address:
             raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
                 error="Agent error",
-                detail=f"Agent {self.name} does not have a public IP address yet",
+                details=f"Agent {self.name} does not have a public IP address yet",
             )
         if not self.config.key_pair:
             raise ServerError(
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
                 error="Agent error",
-                detail=f"Agent {self.name} does not have an SSH key pair configured",
+                details=f"Agent {self.name} does not have an SSH key pair configured",
             )
         return Connection(
             host=str(self.public_ip_address),
@@ -228,7 +226,7 @@ class Agent(AbstractAgent):
             },
         )
 
-    def get_state(self) -> str:
+    def get_state(self) -> AWS_EC2_STATES:
         """Returns the EC2 state"""
         boto3_client = boto3.client("ec2", region_name=self.config.region)
         instance_dict = boto3_client.describe_instances(InstanceIds=[self.config.instance_id])["Reservations"][0][
@@ -236,7 +234,7 @@ class Agent(AbstractAgent):
         ][0]
 
         new_public_ip = IPv4Address(instance_dict["PublicIpAddress"]) if "PublicIpAddress" in instance_dict else None
-        new_instance_state = instance_dict["State"]["Name"]
+        new_instance_state = AWS_EC2_STATES(instance_dict["State"]["Name"])
         if self.instance_state != new_instance_state or self.public_ip_address != new_public_ip:
             self.instance_state = new_instance_state
             self.public_ip_address = new_public_ip

@@ -21,7 +21,7 @@ export default function Home() {
   const [name, setName] = useState("");
   const [region, setRegion] = useState("us-east-1");
   const [instanceType, setInstanceType] = useState("t4g.nano");
-  const [architecture, setArchitecture] = useState<"x86" | "arm">("arm");
+  const [architecture, setArchitecture] = useState<"x86_64" | "arm64">("arm64");
 
   const [agentPendingDelete, setAgentPendingDelete] = useState<string | null>(
     null,
@@ -72,8 +72,14 @@ export default function Home() {
       name: string;
       region: string;
       instanceType: string;
-      architecture: "x86" | "arm";
-    }) => createAgent(payload.name, payload.region, payload.instanceType, payload.architecture),
+      architecture: "x86_64" | "arm64";
+    }) =>
+      createAgent(
+        payload.name,
+        payload.region,
+        payload.instanceType,
+        payload.architecture,
+      ),
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       setStatusMessage(`Agent creation request sent: ${payload.name}.`);
@@ -416,10 +422,12 @@ export default function Home() {
                     id="new-agent-architecture"
                     className="form-select form-select-sm"
                     value={architecture}
-                    onChange={(event) => setArchitecture(event.target.value as "x86" | "arm")}
+                    onChange={(event) =>
+                      setArchitecture(event.target.value as "x86_64" | "arm64")
+                    }
                   >
-                    <option value="arm">arm (ARM64)</option>
-                    <option value="x86">x86 (x86_64)</option>
+                    <option value="arm64">arm64</option>
+                    <option value="x86_64">x86_64</option>
                   </select>
                 </div>
                 <div className="d-flex justify-content-end gap-2">

@@ -54,6 +54,12 @@ def get_statistics(conn: Connection):
     # Get disk usage
     disk_usage_output = conn.run("df / | tail -n 1", hide=True).stdout.strip()
     disk_usage_matches = re.search(r"(\d+) +(\d+) +(\d+) +(\d+)%", disk_usage_output)
+    if type(disk_usage_matches) is not re.Match:
+        raise ServerError(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            error="Invalid response",
+            details="Invalid response to disk usage query",
+        )
     used_disk = int(disk_usage_matches.group(2))
     total_disk = int(disk_usage_matches.group(1))
     disk_usage = f"{used_disk / 1024 / 1024:.2f}GB/{total_disk / 1024 / 1024:.2f}GB"
@@ -61,6 +67,12 @@ def get_statistics(conn: Connection):
     # Get RAM usage
     ram_usage_output = conn.run("cat /proc/meminfo", hide=True).stdout.strip()
     ram_usage_matches = re.search(r"MemTotal: +(\d+) \w+[\n.]+MemFree: +(\d+) \w+", ram_usage_output)
+    if type(ram_usage_matches) is not re.Match:
+        raise ServerError(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            error="Invalid response",
+            details="Invalid response to ram usage query",
+        )
     ram_total = int(ram_usage_matches.group(1))
     ram_free = int(ram_usage_matches.group(2))
     ram_usage = f"{ram_free / 1024 / 1024:.2f}GB/{ram_total / 1024 / 1024:.2f}GB"
@@ -68,6 +80,12 @@ def get_statistics(conn: Connection):
     # Get CPU usage
     cpu_usage_output = conn.run("top -bn1 | grep '%Cpu'", hide=True).stdout.strip()
     cpu_usage_matches = re.search(r"(\d+(\.\d+)?) id", cpu_usage_output)
+    if type(cpu_usage_matches) is not re.Match:
+        raise ServerError(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            error="Invalid response",
+            details="Invalid response to cpu usage query",
+        )
     cpu_usage = f"{100 - float(cpu_usage_matches.group(1)):.2f}%"
 
     return AgentStatusModel(
@@ -87,7 +105,7 @@ def upload_file(conn: Connection, file: UploadFile, destination_path: str) -> Fi
         raise ServerError(
             status_code=HTTPStatus.BAD_REQUEST,
             error="Input error",
-            detail=f"Destination path must be absolute. Received: {destination_path}",
+            details=f"Destination path must be absolute. Received: {destination_path}",
         )
     if destination_path.endswith("/"):
         destination_path = f"{destination_path.rstrip('/')}/{file.filename}"
@@ -98,7 +116,7 @@ def upload_file(conn: Connection, file: UploadFile, destination_path: str) -> Fi
         raise ServerError(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             error="Network error",
-            detail=f"Upload failed for '{destination_path}': {exc}",
+            details=f"Upload failed for '{destination_path}': {exc}",
         ) from exc
 
     return FileUploadModel(
@@ -114,13 +132,13 @@ def download_file(conn: Connection, source_path: str) -> tuple[bytes, str, str]:
         raise ServerError(
             status_code=HTTPStatus.BAD_REQUEST,
             error="Input error",
-            detail=f"Source path must be absolute. Received: {source_path}",
+            details=f"Source path must be absolute. Received: {source_path}",
         )
     if source_path.endswith("/"):
         raise ServerError(
             status_code=HTTPStatus.BAD_REQUEST,
             error="Input error",
-            detail=f"Source path must reference a file. Received: {source_path}",
+            details=f"Source path must reference a file. Received: {source_path}",
         )
 
     filename = PurePosixPath(source_path).name
@@ -133,7 +151,7 @@ def download_file(conn: Connection, source_path: str) -> tuple[bytes, str, str]:
         raise ServerError(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             error="Network error",
-            detail=f"Download failed for '{source_path}': {exc}",
+            details=f"Download failed for '{source_path}': {exc}",
         ) from exc
 
     return payload, filename, mime_type

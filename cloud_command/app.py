@@ -3,7 +3,10 @@
 # Standard libraries
 import asyncio
 import sys
+from collections.abc import MutableMapping
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 # Third-party libraries
 from fastapi import FastAPI, Request, Response
@@ -79,10 +82,10 @@ async def http_exception_handler(request: Request, exc: ServerError):
 
 
 class SPAFileServer(StaticFiles):
-    def __init__(self, directory: str | None = None, html: bool = False, check_dir: bool = True):
+    def __init__(self, directory: Path, html: bool = False, check_dir: bool = True):
         super().__init__(directory=directory, html=html, check_dir=check_dir)
 
-    async def get_response(self, path: str, scope: dict) -> Response:
+    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> Response:
         try:
             return await super().get_response(path, scope)
         except Exception:

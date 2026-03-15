@@ -38,7 +38,7 @@ export type AgentStatusModel = z.infer<typeof AgentStatusModelSchema>;
 export const CreateEC2AgentModelSchema = z.object({
   region: z.string(),
   instance_type: z.string(),
-  architecture: z.enum(["x86", "arm"]),
+  architecture: z.enum(["x86_64", "arm64"]),
 });
 export type CreateEC2AgentModel = z.infer<typeof CreateEC2AgentModelSchema>;
 

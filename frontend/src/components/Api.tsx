@@ -37,7 +37,7 @@ export function createAgent(
   name: string,
   region: string,
   instanceType: string,
-  architecture: "x86" | "arm",
+  architecture: "x86_64" | "arm64",
 ) {
   return api.request<void>({
     method: "POST",
@@ -150,7 +150,10 @@ export function sendCtrlCShellCommand(uuid: string) {
   });
 }
 
-export function getShellOutput(uuid: string, showExisting?: boolean): Promise<string | null> {
+export function getShellOutput(
+  uuid: string,
+  showExisting?: boolean,
+): Promise<string | null> {
   return axiosZod(z.string().nullable(), {
     method: "GET",
     url: `/shell/${uuid}/get_output`,

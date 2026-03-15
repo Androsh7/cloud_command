@@ -16,21 +16,21 @@ class AbstractAgent(ABC):
         pass
 
     @abstractmethod
-    def dump_config() -> Path:
+    def dump_config(self) -> Path:
         """Dump config to a file"""
         pass
 
     @abstractmethod
-    def destroy():
+    def destroy(self):
         """Destroy the associated resources"""
         pass
 
     @abstractmethod
-    def build():
+    def build(self):
         """Provision the resources to create the agent"""
         pass
 
     @abstractmethod
-    def connection() -> Connection:
+    def connection(self) -> Connection:
         """Return a fabric connection object"""
         pass
