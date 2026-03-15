@@ -89,5 +89,5 @@ class SPAFileServer(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
-app.mount("/mcp", mcp_http_app)
+app.mount("/api/mcp", mcp_http_app)
 app.mount("/", SPAFileServer(directory=REACT_FILE_PATH, html=True), name="react-app")
