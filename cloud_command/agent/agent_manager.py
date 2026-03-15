@@ -59,7 +59,7 @@ class AgentManager:
         """Update the status of all agents."""
         await asyncio.gather(*(asyncio.to_thread(agent.get_state) for agent in self.agent_list))
 
-    async def create_ec2_agent(self, name: str, instance_type: str, region: str) -> Agent:
+    async def create_ec2_agent(self, name: str, instance_type: str, region: str, architecture: str) -> Agent:
         """Create and persist a new EC2-backed agent."""
         with self._lock:
             if any(existing_agent.name == name for existing_agent in self.agent_list):
@@ -69,7 +69,7 @@ class AgentManager:
                     detail=f"Agent with name {name} already exists",
                 )
 
-        agent = Agent(name=name, config=Ec2Config(instance_type=instance_type, region=region))
+        agent = Agent(name=name, config=Ec2Config(instance_type=instance_type, region=region, architecture=architecture))
         await asyncio.to_thread(agent.build)
         agent.dump_config()
 

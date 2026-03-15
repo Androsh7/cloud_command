@@ -21,6 +21,7 @@ export default function Home() {
   const [name, setName] = useState("");
   const [region, setRegion] = useState("us-east-1");
   const [instanceType, setInstanceType] = useState("t4g.nano");
+  const [architecture, setArchitecture] = useState<"x86" | "arm">("arm");
 
   const [agentPendingDelete, setAgentPendingDelete] = useState<string | null>(
     null,
@@ -71,7 +72,8 @@ export default function Home() {
       name: string;
       region: string;
       instanceType: string;
-    }) => createAgent(payload.name, payload.region, payload.instanceType),
+      architecture: "x86" | "arm";
+    }) => createAgent(payload.name, payload.region, payload.instanceType, payload.architecture),
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       setStatusMessage(`Agent creation request sent: ${payload.name}.`);
@@ -79,6 +81,7 @@ export default function Home() {
       setName("");
       setRegion("us-east-1");
       setInstanceType("t4g.nano");
+      setArchitecture("arm");
     },
     onError: (error) => {
       setStatusMessage(`Failed to create agent: ${(error as Error).message}`);
@@ -129,7 +132,7 @@ export default function Home() {
   function handleCreateAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatusMessage(null);
-    createAgentMutation.mutate({ name, region, instanceType });
+    createAgentMutation.mutate({ name, region, instanceType, architecture });
   }
 
   function handleConfirmDeleteAgent() {
@@ -386,7 +389,7 @@ export default function Home() {
                     required
                   />
                 </div>
-                <div className="mb-3">
+                <div className="mb-2">
                   <label
                     className="form-label small mb-1"
                     htmlFor="new-agent-instance"
@@ -401,6 +404,23 @@ export default function Home() {
                     placeholder="t4g.nano"
                     required
                   />
+                </div>
+                <div className="mb-3">
+                  <label
+                    className="form-label small mb-1"
+                    htmlFor="new-agent-architecture"
+                  >
+                    Architecture
+                  </label>
+                  <select
+                    id="new-agent-architecture"
+                    className="form-select form-select-sm"
+                    value={architecture}
+                    onChange={(event) => setArchitecture(event.target.value as "x86" | "arm")}
+                  >
+                    <option value="arm">arm (ARM64)</option>
+                    <option value="x86">x86 (x86_64)</option>
+                  </select>
                 </div>
                 <div className="d-flex justify-content-end gap-2">
                   <button

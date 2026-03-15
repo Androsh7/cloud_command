@@ -33,3 +33,4 @@ GENERATED_SSL_KEY = PARENT_DIRECTORY / "frontend" / "self-signed.key"
 
 # AWS
 AWS_EC2_STATES = ("pending", "running", "shutting-down", "terminated", "stopping", "stopped")
+ARCHITECTURES = ["x86", "arm"]

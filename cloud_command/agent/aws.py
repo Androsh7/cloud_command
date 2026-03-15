@@ -2,16 +2,18 @@
 
 # Standard libraries
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 # Third-party libraries
 import boto3
+from attrs import define, field, validators
+from tqdm import tqdm
 from botocore.exceptions import ClientError
 from loguru import logger
 
 
 def load_regions() -> list[str]:
-    """Returns a dictionary of AWS regions and their availability zones"""
+    """Returns a list of AWS regions"""
     logger.info("Loading AWS regions")
     boto3_client = boto3.client("ec2")
 
@@ -24,6 +26,26 @@ def load_regions() -> list[str]:
 
     return sorted(set(out_list))
 
+@define
+class DetachedAgent:
+    id: str = field(validator=validators.instance_of(str))
+    key_pair: Optional[str] = field(validator=validators.optional(validators.instance_of(str)))
+    region: str = field(validator=validators.instance_of(str))
+
+def list_all_ec2s() -> list[DetachedAgent]:
+    out_list = []
+    regions = load_regions()
+    for region in tqdm(regions, desc="Searching by region", unit="region"):
+        boto3_client = boto3.client("ec2", region_name=region)
+        paginator = boto3_client.get_paginator("describe_instances")
+        for page in paginator.paginate(Filters=[{"Name": "tag:Type", "Values": ["cloud_command"]}]):
+            for reservation in page["Reservations"]:
+                for instance in reservation["Instances"]:
+                    if instance["State"]["Name"] != "terminated":
+                        out_list.append(
+                            DetachedAgent(id=instance["InstanceId"], key_pair=instance.get("KeyName"), region=region)
+                        )
+    return out_list
 
 def create_ec2_key_pair(region: str, key_pair_name: str, public_key_path: Path):
     """Create an SSH key pair, automatically replaces existing key pairs with the same name
@@ -79,7 +101,7 @@ def get_vpc_subnet_id(region: str, vpc_id: str) -> str:
     ][0]["SubnetId"]
 
 
-def get_ami_id(region: str, architecture: Literal["arm64", "x86_64"] = "arm64") -> str:
+def get_ami_id(region: str, architecture: Literal["arm", "x86"] = "arm") -> str:
     """Returns the AMI ID for the amazon linux 2023 in the region with the specified architecture
 
     Args:
@@ -89,8 +111,9 @@ def get_ami_id(region: str, architecture: Literal["arm64", "x86_64"] = "arm64") 
     Returns:
         Returns the AMI ID
     """
+    ssm_arch = "arm64" if architecture == "arm" else "x86_64"
     return boto3.client("ssm", region_name=region).get_parameter(
-        Name=f"/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-{architecture}"
+        Name=f"/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-{ssm_arch}"
     )["Parameter"]["Value"]
 
 

@@ -1,5 +1,7 @@
 .form-control,
-.form-control:focus {
+.form-control:focus,
+.form-select,
+.form-select:focus {
   background-color: #363636 !important;
   color: #ffffff !important;
 }

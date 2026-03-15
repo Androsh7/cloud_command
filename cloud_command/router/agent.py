@@ -4,6 +4,7 @@
 import asyncio
 from http import HTTPStatus
 from pathlib import Path
+from typing import Literal
 
 # Third-party libraries
 from fastapi import APIRouter, Response
@@ -73,6 +74,7 @@ async def get_cluster_list() -> list[AgentModel]:
 class CreateEC2AgentModel(BaseModel):
     region: str = Field(examples=["us-east-2"])
     instance_type: str = Field(examples=["t4g.nano"])
+    architecture: Literal["x86", "arm"] = Field(default="arm", examples=["arm"])
 
 
 @cluster_router.post(
@@ -88,6 +90,7 @@ async def create_ec2_agent(name: str, create_ec2_model: CreateEC2AgentModel) -> 
         name=name,
         instance_type=create_ec2_model.instance_type,
         region=create_ec2_model.region,
+        architecture=create_ec2_model.architecture,
     )
     return Response(status_code=HTTPStatus.CREATED)
 

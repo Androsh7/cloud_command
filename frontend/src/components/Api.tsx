@@ -37,6 +37,7 @@ export function createAgent(
   name: string,
   region: string,
   instanceType: string,
+  architecture: "x86" | "arm",
 ) {
   return api.request<void>({
     method: "POST",
@@ -44,6 +45,7 @@ export function createAgent(
     data: {
       region,
       instance_type: instanceType,
+      architecture,
     },
   });
 }

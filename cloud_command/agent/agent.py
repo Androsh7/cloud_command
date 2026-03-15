@@ -7,7 +7,7 @@ import sys
 from http import HTTPStatus
 from ipaddress import IPv4Address
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 # Third-party libraries
 import boto3
@@ -25,7 +25,7 @@ from cloud_command.agent.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
-from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT
+from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, AWS_EC2_STATES, SSH_TIMEOUT, ARCHITECTURES
 from cloud_command.router.error_model import ServerError
 from cloud_command.utils import SshKeyPair, create_ssh_key_pair
 
@@ -34,6 +34,7 @@ from cloud_command.utils import SshKeyPair, create_ssh_key_pair
 class Ec2Config:
     instance_type: str = field(validator=validators.instance_of(str))
     region: str = field(validator=validators.instance_of(str))
+    architecture: Literal[*ARCHITECTURES] = field(default="arm", validator=validators.and_(validators.instance_of(str), validators.in_(ARCHITECTURES)))
     ami_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     instance_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
     vpc_id: str | None = field(default=None, validator=validators.optional(validators.instance_of(str)))
@@ -60,12 +61,14 @@ class Ec2Config:
             subnet_id=config.get("subnet_id"),
             security_group_id=config.get("security_group_id"),
             key_pair_name=config.get("key_pair_name"),
+            architecture=config["architecture"],
             key_pair=key_pair,
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "instance_type": self.instance_type,
+            "architecture": self.architecture,
             "region": self.region,
             "ami_id": self.ami_id,
             "instance_id": self.instance_id,
@@ -178,7 +181,7 @@ class Agent(AbstractAgent):
             public_key_path=self.config.key_pair.public_key,
         )
 
-        self.config.ami_id = get_ami_id(region=self.config.region)
+        self.config.ami_id = get_ami_id(region=self.config.region, architecture=self.config.architecture)
         self.config.vpc_id = get_default_vpc_id(region=self.config.region)
         self.config.security_group_id = create_security_group(region=self.config.region, vpc_id=self.config.vpc_id)
         self.config.subnet_id = get_vpc_subnet_id(region=self.config.region, vpc_id=self.config.vpc_id)

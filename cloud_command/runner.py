@@ -3,14 +3,18 @@
 # Standard libraries
 import argparse
 from pathlib import Path
+import shutil
+import sys
 
 # Third-party libraries
+import boto3
 import uvicorn
 from loguru import logger
 
 # Project libraries
 from cloud_command.app import app
-from cloud_command.constants import GENERATED_SSL_CERTIFICATE, GENERATED_SSL_KEY, VERSION
+from cloud_command.agent.aws import list_all_ec2s
+from cloud_command.constants import GENERATED_SSL_CERTIFICATE, GENERATED_SSL_KEY, VERSION, AGENT_DIRECTORY
 from cloud_command.ssl_cert import generate_self_signed_cert
 
 
@@ -31,7 +35,28 @@ def main():
         "--public-key-path", type=Path, default=None, help="Path to public key for SSH access to agents"
     )
 
+    # Add management arguments
+    management_arguments = parser.add_argument_group("management options")
+    management_arguments.add_argument("--list-all", action="store_true", help="Lists all EC2s with a 'cloud_command' tag")
+    management_arguments.add_argument("--delete-all", action="store_true", help="Destroys all EC2s with a 'cloud_command' tag")
+
     args = parser.parse_args()
+
+    if args.list_all or args.delete_all:
+        detached_list = list_all_ec2s()
+        for detached in detached_list:
+            if args.delete_all:
+                logger.info(f'Destroying EC2 {detached.id} in region {detached.region}')
+                boto3_client = boto3.client("ec2", region_name=detached.region)
+                boto3_client.terminate_instances(InstanceIds=[detached.id])
+                if detached.key_pair is not None:
+                    boto3_client.delete_key_pair(KeyName=detached.key_pair)
+            else:
+                logger.info(f'Found EC2 {detached.id} in region {detached.region}')
+        if args.delete_all:
+            shutil.rmtree(AGENT_DIRECTORY)
+        sys.exit(0)
+
 
     # Validate ssl path
     if args.private_key_path and args.public_key_path:
