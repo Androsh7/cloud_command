@@ -15,6 +15,7 @@ from loguru import logger
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.constants import REACT_FILE_PATH, STATUS_TRACKER_UPDATE_INTERVAL, VERSION
+from cloud_command.mcp_server import mcp_http_app
 from cloud_command.router.agent import cluster_router
 from cloud_command.router.command import command_router
 from cloud_command.router.error_model import ServerError
@@ -40,16 +41,13 @@ def _windows_connection_reset_handler(loop, context):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup actions
-    if sys.platform == "win32":
-        asyncio.get_event_loop().set_exception_handler(_windows_connection_reset_handler)
-    agent_manager.load_all_agents()
-    status_task = asyncio.create_task(status_update_loop())
-
-    yield
-
-    # Shutdown actions
-    status_task.cancel()
+    async with mcp_http_app.router.lifespan_context(app):
+        if sys.platform == "win32":
+            asyncio.get_event_loop().set_exception_handler(_windows_connection_reset_handler)
+        agent_manager.load_all_agents()
+        status_task = asyncio.create_task(status_update_loop())
+        yield
+        status_task.cancel()
 
 
 app = FastAPI(
@@ -91,4 +89,5 @@ class SPAFileServer(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
+app.mount("/mcp", mcp_http_app)
 app.mount("/", SPAFileServer(directory=REACT_FILE_PATH, html=True), name="react-app")
