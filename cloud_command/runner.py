@@ -20,7 +20,7 @@ from cloud_command.ssl_cert import generate_self_signed_cert
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="CloudCommand", description="GUI for commanding multiple AWS assets")
+    parser = argparse.ArgumentParser(prog="cloud_command", description="GUI for commanding multiple AWS assets")
     parser.add_argument("--version", action="version", version=f"CloudCommand v{VERSION}")
 
     # Add uvicorn arguments
