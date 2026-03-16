@@ -28,6 +28,7 @@ from cloud_command.agent.aws import (
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, ARCHITECTURES, AWS_EC2_STATES, SSH_TIMEOUT
 from cloud_command.router.error_model import ServerError
 from cloud_command.utils import SshKeyPair, create_ssh_key_pair
+from cloud_command.command.shell_session import ShellSession, ShellSessionConfig
 
 
 @define
@@ -97,6 +98,7 @@ class Agent(AbstractAgent):
         default=AWS_EC2_STATES.pending,
         validator=validators.instance_of(AWS_EC2_STATES),
     )
+    session_list: list[ShellSession] = field(init=False, factory=list, validator=validators.deep_iterable(member_validator=validators.instance_of(ShellSession), iterable_validator=validators.instance_of(list)))
     public_ip_address: IPv4Address | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(IPv4Address)),
@@ -105,27 +107,30 @@ class Agent(AbstractAgent):
     def __attrs_post_init__(self):
         self.config_dir = AGENT_DIRECTORY / self.name
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.session_list = []
 
     @classmethod
     def from_config(cls, config_path: Path):
         with open(file=config_path, encoding="utf-8") as config_file:
-            payload = json.load(config_file)
+            config_dict = json.load(config_file)
 
         agent = cls(
-            name=payload["name"],
-            config=Ec2Config.from_dict(payload["config"]),
-            delete_on_exit=payload.get("delete_on_exit", True),
-            instance_state=AWS_EC2_STATES(payload.get("instance_state", "pending")),
+            name=config_dict["name"],
+            config=Ec2Config.from_dict(config_dict["config"]),
+            delete_on_exit=config_dict.get("delete_on_exit", True),
+            instance_state=AWS_EC2_STATES(config_dict.get("instance_state", "pending")),
         )
-        if payload.get("config_dir"):
-            agent.config_dir = Path(payload["config_dir"])
+        if config_dict.get("config_dir"):
+            agent.config_dir = Path(config_dict["config_dir"])
             agent.config_dir.mkdir(parents=True, exist_ok=True)
-        if payload.get("public_ip_address"):
-            agent.public_ip_address = IPv4Address(payload["public_ip_address"])
+        if config_dict.get("public_ip_address"):
+            agent.public_ip_address = IPv4Address(config_dict["public_ip_address"])
+        for session_dict in config_dict["session_list"]:
+            agent.session_list.append(ShellSession.from_config(agent=agent, config=ShellSessionConfig(uuid=session_dict["uuid"])))
         return agent
 
     def destroy(self):
-        """Destroy EC2 resources for this agent."""
+        """Destroy EC2 resources for this agent"""
         logger.debug(f"Destroying EC2 resources for {self.name}")
         if not self.config.instance_id:
             logger.debug(f"Agent {self.name} has no instance_id, skipping EC2 termination")
@@ -152,6 +157,7 @@ class Agent(AbstractAgent):
                     "public_ip_address": str(self.public_ip_address) if self.public_ip_address else None,
                     "instance_state": self.instance_state,
                     "delete_on_exit": self.delete_on_exit,
+                    "session_list": [session.to_config().to_dict() for session in self.session_list],
                     "config": self.config.to_dict(),
                 },
                 config_file,

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 # Project libraries
 from cloud_command.agent.agent_manager import agent_manager
 from cloud_command.command.commands import AgentStatusModel
-from cloud_command.command.shell_manager import ShellSession, TmuxSendKeys, shell_session_manager
+from cloud_command.command.shell_session import ShellSession, TmuxSendKeys
 from cloud_command.router.error_model import ErrorResponse, ServerError
 
 shell_router = APIRouter(tags=["Shell"])
@@ -33,7 +33,7 @@ class ShellSessionModel(BaseModel):
 @shell_router.get("/shell/list")
 async def list_shell_sessions() -> list[ShellSessionModel]:
     out_list = []
-    for shell_session in shell_session_manager.shell_sessions:
+    for shell_session in agent_manager.get_session_list():
         out_list.append(ShellSessionModel.from_shell_session(shell_session))
     return out_list
 
@@ -60,7 +60,7 @@ async def create_shell_session(request: CreateShellSessionModel) -> UUID:
             error="EC2 unavailable",
             details="EC2 is still pending an IP address assignment",
         )
-    return await asyncio.to_thread(shell_session_manager.create_session, request.agent)
+    return await asyncio.to_thread(agent_manager.create_session, request.agent)
 
 
 @shell_router.delete(
@@ -75,7 +75,7 @@ async def create_shell_session(request: CreateShellSessionModel) -> UUID:
     },
 )
 async def delete_shell_session(uuid: UUID):
-    await asyncio.to_thread(shell_session_manager.delete_session, uuid)
+    await asyncio.to_thread(agent_manager.delete_session, uuid)
     return Response(status_code=HTTPStatus.NO_CONTENT)
 
 
@@ -90,7 +90,7 @@ async def delete_shell_session(uuid: UUID):
     status_code=HTTPStatus.CREATED,
 )
 async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Response:
-    shell_session = shell_session_manager.get_session(uuid=uuid)
+    shell_session = agent_manager.get_session(uuid=uuid)
     await asyncio.to_thread(shell_session.session_send_command, command)
     return Response(status_code=HTTPStatus.CREATED)
 
@@ -106,7 +106,7 @@ async def run_command_shell_session(uuid: UUID, command: TmuxSendKeys) -> Respon
     status_code=HTTPStatus.CREATED,
 )
 async def run_command_ctrl_c_shell_session(uuid: UUID) -> Response:
-    shell_session = shell_session_manager.get_session(uuid=uuid)
+    shell_session = agent_manager.get_session(uuid=uuid)
     await asyncio.to_thread(shell_session.session_send_ctrl_c)
     return Response(status_code=HTTPStatus.CREATED)
 
@@ -120,7 +120,7 @@ async def run_command_ctrl_c_shell_session(uuid: UUID) -> Response:
     },
 )
 async def get_output_shell_session(uuid: UUID, show_existing: bool = False) -> str | None:
-    shell_session = shell_session_manager.get_session(uuid=uuid)
+    shell_session = agent_manager.get_session(uuid=uuid)
     has_change, content = await asyncio.to_thread(shell_session.session_get_output)
     if has_change or show_existing:
         return content
@@ -136,5 +136,5 @@ async def get_output_shell_session(uuid: UUID, show_existing: bool = False) -> s
     },
 )
 async def get_statistics_shell_session(uuid: UUID) -> AgentStatusModel:
-    shell_session = shell_session_manager.get_session(uuid=uuid)
+    shell_session = agent_manager.get_session(uuid=uuid)
     return await asyncio.to_thread(shell_session.session_get_statistics)
