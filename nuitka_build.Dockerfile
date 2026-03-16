@@ -3,9 +3,12 @@ WORKDIR /src
 COPY cloud_command /src/cloud_command
 COPY pyproject.toml /src/pyproject.toml
 COPY version.txt /src/version.txt
+COPY boto_clean.py /src/boto_clean.py
 RUN mkdir -p /src/frontend
 COPY frontend/dist /src/frontend/dist
+ENV CLEAN_BOTO_IGNORE_ENV=True
 RUN python3 -m pip install .[dev] \
+&& python3 /src/boto_clean.py \
 && python3 -m nuitka \
     --standalone \
     --onefile \

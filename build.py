@@ -41,7 +41,7 @@ def build_linux():
         "&& docker run --name nuitka-compiler nuitka-compiler:latest "
         "&& docker cp nuitka-compiler:/src/cloud_command.bin cloud_command.bin "
         "&& docker rm nuitka-compiler "
-        "&& docker rmi nuitka-compiler",
+        "&& docker rmi nuitka-compiler:latest",
         cwd=PARENT_DIRECTORY,
         shell=True,
         check=True,
@@ -49,6 +49,13 @@ def build_linux():
 
 
 def build_windows():
+    subprocess.run(
+        "python3 boto_clean.py",
+        cwd=PARENT_DIRECTORY,
+        capture_output=False,
+        shell=True,
+        check=True,
+    )
     subprocess.run(
         "nuitka "
         "--assume-yes-for-downloads "
