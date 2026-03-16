@@ -21,6 +21,11 @@ jobs:
           python-version: "3.13"
           cache: "pip"
 
+      - name: Switch Docker to Linux containers
+        run: |
+          & "$Env:ProgramFiles\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine
+        shell: powershell
+
       - name: Build
         run: |
           pip install .[dev]
