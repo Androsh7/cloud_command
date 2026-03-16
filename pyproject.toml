@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloud_command"
+version = "0.1.0"
+description = "GUI for commanding multiple AWS assets"
+requires-python = ">=3.13"
+dependencies = [
+    "attrs",
+    "boto3",
+    "cryptography",
+    "fabric",
+    "fastapi",
+    "loguru",
+    "mcp",
+    "python-multipart",
+    "tqdm",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy",
+    "nuitka",
+    "pytest",
+    "ruff",
+    "zstandard",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+select = [
+    "E", # Pycodestyle errors
+    "F", # Pyflakes
+    "I", # Isort
+    "PL", # Pylint
+    "UP", # Pyupgrade
+]
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+
+[tool.setuptools]
+packages = ["cloud_command"]
