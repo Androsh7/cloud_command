@@ -1,0 +1,75 @@
+name: Build WhereMyTunnels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Build
+        run: |
+          mkdir dist
+          python build.py --windows
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheremytunnels-windows-x86_64.exe
+          path: cloud_command.exe
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux (${{ matrix.libc }} / ${{ matrix.architecture }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - libc: "glibc-2.28"
+            architecture: "x86_64"
+            out_name: "cloud_command-linux-x86_64-glibc-2.28.bin"
+
+          - libc: "musl-1.2"
+            architecture: "x86_64"
+            out_name: "cloud_command-linux-x86_64-musl-1.2.bin"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build
+        run: |
+          python build.py --linux \
+            --libc "${{ matrix.libc }}" \
+            --architecture "${{ matrix.architecture }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out_name }}
+          path: cloud_command.bin
+          if-no-files-found: error
