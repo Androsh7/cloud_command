@@ -55,6 +55,7 @@ jobs:
       - name: Build
         run: |
           pip install .[dev]
+          $env:CLEAN_BOTO_IGNORE_ENV=$true
           python build.py --windows --skip-npm
 
       - name: Upload artifact
