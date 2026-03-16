@@ -83,9 +83,10 @@ def main():
     )
     parser.add_argument("--libc", type=str, default="glibc-2.28", help="The libc and version, default: glibc-2.28")
     parser.add_argument("--build-all", action="store_true", help="Build the Windows and Linux executable")
+    parser.add_argument("--skip-npm", action="store_true", help="Skip the npm build step (use pre-built frontend/dist)")
     args = parser.parse_args()
 
-    if args.windows or args.linux or args.build_all:
+    if (args.windows or args.linux or args.build_all) and not args.skip_npm:
         build_npm()
     if args.windows or args.build_all:
         build_windows()
