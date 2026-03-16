@@ -34,3 +34,9 @@ class AbstractAgent(ABC):
     def connection(self) -> Connection:
         """Return a fabric connection object"""
         pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Returns the agent name"""
+        pass

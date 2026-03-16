@@ -16,7 +16,7 @@ if sys.prefix == sys.base_prefix and not os.environ.get("CLEAN_BOTO_IGNORE_ENV",
     print(
         "ERROR: No virtual environment detected\n"
         "This script will delete parts of boto3 and botocore and should only be run with a virtual environment\n"
-        'Set the environmental variable CLEAN_BOTO_IGNORE_ENV=True to bypass this warning'
+        "Set the environmental variable CLEAN_BOTO_IGNORE_ENV=True to bypass this warning"
     )
     sys.exit(1)
 else:

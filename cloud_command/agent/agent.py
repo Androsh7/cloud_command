@@ -25,10 +25,10 @@ from cloud_command.agent.aws import (
     get_default_vpc_id,
     get_vpc_subnet_id,
 )
+from cloud_command.command.shell_session import ShellSession, ShellSessionConfig
 from cloud_command.constants import AGENT_CONFIG_FILENAME, AGENT_DIRECTORY, ARCHITECTURES, AWS_EC2_STATES, SSH_TIMEOUT
 from cloud_command.router.error_model import ServerError
 from cloud_command.utils import SshKeyPair, create_ssh_key_pair
-from cloud_command.command.shell_session import ShellSession, ShellSessionConfig
 
 
 @define
@@ -98,7 +98,13 @@ class Agent(AbstractAgent):
         default=AWS_EC2_STATES.pending,
         validator=validators.instance_of(AWS_EC2_STATES),
     )
-    session_list: list[ShellSession] = field(init=False, factory=list, validator=validators.deep_iterable(member_validator=validators.instance_of(ShellSession), iterable_validator=validators.instance_of(list)))
+    session_list: list[ShellSession] = field(
+        init=False,
+        factory=list,
+        validator=validators.deep_iterable(
+            member_validator=validators.instance_of(ShellSession), iterable_validator=validators.instance_of(list)
+        ),
+    )
     public_ip_address: IPv4Address | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(IPv4Address)),
@@ -126,7 +132,9 @@ class Agent(AbstractAgent):
         if config_dict.get("public_ip_address"):
             agent.public_ip_address = IPv4Address(config_dict["public_ip_address"])
         for session_dict in config_dict["session_list"]:
-            agent.session_list.append(ShellSession.from_config(agent=agent, config=ShellSessionConfig(uuid=session_dict["uuid"])))
+            agent.session_list.append(
+                ShellSession.from_config(agent=agent, config=ShellSessionConfig(uuid=session_dict["uuid"]))
+            )
         return agent
 
     def destroy(self):
