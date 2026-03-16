@@ -1,4 +1,6 @@
-FROM androsh7/nuitka-compiler:latest-x86_64-glibc-2.28-py3.13
+ARG architecture="x86_64"
+ARG libc="glibc-2.28"
+FROM androsh7/nuitka-compiler:latest-${architecture}-${libc}-py3.13
 WORKDIR /src
 COPY cloud_command /src/cloud_command
 COPY pyproject.toml /src/pyproject.toml

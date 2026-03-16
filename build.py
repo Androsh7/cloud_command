@@ -28,7 +28,7 @@ def build_npm():
     )
 
 
-def build_linux():
+def build_linux(architecture: str, libc: str):
     subprocess.run(
         "docker rmi --force nuitka-compiler:latest",
         cwd=PARENT_DIRECTORY,
@@ -37,7 +37,8 @@ def build_linux():
         capture_output=True,
     )
     subprocess.run(
-        "docker build -t nuitka-compiler:latest -f nuitka_build.Dockerfile . "
+        "docker build -t nuitka-compiler:latest -f nuitka_build.Dockerfile "
+        f"--build-arg architecture={architecture} --build-arg libc={libc} . "
         "&& docker run --name nuitka-compiler nuitka-compiler:latest "
         "&& docker cp nuitka-compiler:/src/cloud_command.bin cloud_command.bin "
         "&& docker rm nuitka-compiler "
@@ -77,6 +78,10 @@ def main():
     parser = argparse.ArgumentParser(prog="build.py")
     parser.add_argument("--windows", action="store_true", help="Build the Windows executable")
     parser.add_argument("--linux", action="store_true", help="Build the Linux executable")
+    parser.add_argument(
+        "--architecture", type=str, default="x86_64", help="Architecture for Linux executable, default: x86_64"
+    )
+    parser.add_argument("--libc", type=str, default="glibc-2.28", help="The libc and version, default: glibc-2.28")
     parser.add_argument("--build-all", action="store_true", help="Build the Windows and Linux executable")
     args = parser.parse_args()
 
@@ -85,7 +90,7 @@ def main():
     if args.windows or args.build_all:
         build_windows()
     if args.linux or args.build_all:
-        build_linux()
+        build_linux(libc=args.libc, architecture=args.architecture)
     if not args.linux and not args.windows and not args.build_all:
         parser.print_help()
 
