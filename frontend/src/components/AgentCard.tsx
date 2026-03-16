@@ -13,7 +13,7 @@ interface AgentCardProps {
   shells: ShellSessionModel[];
   onDeleteClick: (agentName: string) => void;
   onRunCommandClick: (agentName: string) => void;
-  onStatusMessage: (msg: string) => void;
+  onStatusMessage: (msg: string, isError?: boolean) => void;
 }
 
 export default function AgentCard({
@@ -35,7 +35,7 @@ export default function AgentCard({
       onStatusMessage(`Created shell ${uuid} for ${agent.name}.`);
     },
     onError: (error) => {
-      onStatusMessage(`Failed to create shell: ${(error as Error).message}`);
+      onStatusMessage(`Failed to create shell: ${(error as Error).message}`, true);
     },
     onSettled: () => {
       setCreatingShell(false);
@@ -49,7 +49,7 @@ export default function AgentCard({
       onStatusMessage(`Deleted shell ${uuid}.`);
     },
     onError: (error) => {
-      onStatusMessage(`Failed to delete shell: ${(error as Error).message}`);
+      onStatusMessage(`Failed to delete shell: ${(error as Error).message}`, true);
     },
     onSettled: () => {
       setDeletingShellUuid(null);

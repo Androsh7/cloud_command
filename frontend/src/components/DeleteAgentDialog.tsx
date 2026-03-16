@@ -5,7 +5,7 @@ import { deleteAgent } from "./Api";
 interface DeleteAgentDialogProps {
   agentName: string;
   onClose: () => void;
-  onStatusMessage: (msg: string) => void;
+  onStatusMessage: (msg: string, isError?: boolean) => void;
 }
 
 export default function DeleteAgentDialog({
@@ -24,7 +24,7 @@ export default function DeleteAgentDialog({
       onClose();
     },
     onError: (error) => {
-      onStatusMessage(`Failed to delete agent: ${(error as Error).message}`);
+      onStatusMessage(`Failed to delete agent: ${(error as Error).message}`, true);
     },
   });
 

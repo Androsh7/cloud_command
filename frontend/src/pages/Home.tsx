@@ -10,7 +10,14 @@ export default function Home() {
   const [isAddAgentDialogOpen, setIsAddAgentDialogOpen] = useState(false);
   const [agentPendingDelete, setAgentPendingDelete] = useState<string | null>(null);
   const [runCommandAgent, setRunCommandAgent] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    text: string;
+    isError: boolean;
+  } | null>(null);
+
+  function handleStatusMessage(msg: string, isError = false) {
+    setStatusMessage({ text: msg, isError });
+  }
 
   const {
     data: agents,
@@ -76,7 +83,17 @@ export default function Home() {
       </div>
 
       {statusMessage ? (
-        <div className="alert alert-info dark-text py-2">{statusMessage}</div>
+        <div
+          className={`alert py-2 d-flex justify-content-between align-items-center ${statusMessage.isError ? "alert-danger" : "alert-info dark-text"}`}
+        >
+          <span>{statusMessage.text}</span>
+          <button
+            type="button"
+            className="btn-close"
+            aria-label="Close"
+            onClick={() => setStatusMessage(null)}
+          />
+        </div>
       ) : null}
 
       {!agents || agents.length === 0 ? (
@@ -90,7 +107,7 @@ export default function Home() {
               shells={shellsByAgent.get(agent.name) ?? []}
               onDeleteClick={setAgentPendingDelete}
               onRunCommandClick={setRunCommandAgent}
-              onStatusMessage={setStatusMessage}
+              onStatusMessage={handleStatusMessage}
             />
           ))}
         </div>
@@ -99,7 +116,7 @@ export default function Home() {
       {isAddAgentDialogOpen ? (
         <AddAgentDialog
           onClose={() => setIsAddAgentDialogOpen(false)}
-          onStatusMessage={setStatusMessage}
+          onStatusMessage={handleStatusMessage}
         />
       ) : null}
 
@@ -107,7 +124,7 @@ export default function Home() {
         <DeleteAgentDialog
           agentName={agentPendingDelete}
           onClose={() => setAgentPendingDelete(null)}
-          onStatusMessage={setStatusMessage}
+          onStatusMessage={handleStatusMessage}
         />
       ) : null}
 
@@ -115,7 +132,7 @@ export default function Home() {
         <RunCommandDialog
           agentName={runCommandAgent}
           onClose={() => setRunCommandAgent(null)}
-          onStatusMessage={setStatusMessage}
+          onStatusMessage={handleStatusMessage}
         />
       ) : null}
     </div>

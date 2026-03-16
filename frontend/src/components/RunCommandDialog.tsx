@@ -6,7 +6,7 @@ import type { CommandResultModel } from "./Models";
 interface RunCommandDialogProps {
   agentName: string;
   onClose: () => void;
-  onStatusMessage: (msg: string) => void;
+  onStatusMessage: (msg: string, isError?: boolean) => void;
 }
 
 export default function RunCommandDialog({
@@ -24,7 +24,7 @@ export default function RunCommandDialog({
       setCommandResult(result);
     },
     onError: (error) => {
-      onStatusMessage(`Command failed: ${(error as Error).message}`);
+      onStatusMessage(`Command failed: ${(error as Error).message}`, true);
     },
   });
 

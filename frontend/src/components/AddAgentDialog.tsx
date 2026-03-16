@@ -4,7 +4,7 @@ import { createAgent } from "./Api";
 
 interface AddAgentDialogProps {
   onClose: () => void;
-  onStatusMessage: (msg: string) => void;
+  onStatusMessage: (msg: string, isError?: boolean) => void;
 }
 
 export default function AddAgentDialog({
@@ -37,7 +37,7 @@ export default function AddAgentDialog({
       onClose();
     },
     onError: (error) => {
-      onStatusMessage(`Failed to create agent: ${(error as Error).message}`);
+      onStatusMessage(`Failed to create agent: ${(error as Error).message}`, true);
     },
   });
 
