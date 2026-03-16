@@ -61,7 +61,7 @@ class Ec2Config:
             subnet_id=config.get("subnet_id"),
             security_group_id=config.get("security_group_id"),
             key_pair_name=config.get("key_pair_name"),
-            architecture=config["architecture"],
+            architecture=ARCHITECTURES(config["architecture"]),
             key_pair=key_pair,
         )
 
