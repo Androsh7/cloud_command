@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "CloudCommand"
+name = "cloud_command"
 version = "0.1.0"
 description = "GUI for commanding multiple AWS assets"
 requires-python = ">=3.13"
