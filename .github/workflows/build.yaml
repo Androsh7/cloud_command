@@ -23,7 +23,7 @@ jobs:
 
       - name: Build
         run: |
-          mkdir dist
+          pip install .[dev]
           python build.py --windows
 
       - name: Upload artifact
