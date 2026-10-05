@@ -3,16 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/androsh7/cloud_command/internal/config"
+	"github.com/androsh7/cloud_command/internal/tui"
 	"github.com/androsh7/cloud_command/pkg/ec2"
-	"github.com/androsh7/cloud_command/pkg/sshx"
 )
 
 func main() {
@@ -23,27 +19,21 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	defer logFile.Close()
 
 	// Configure logger
 	logger := slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{
-		Level: slog.LevelInfo, 
+		Level:     slog.LevelInfo,
 		AddSource: true,
 	}))
 	slog.SetDefault(logger)
 
-	// Connect to ssh host
-	sshHost := sshx.NewSshHost("127.0.0.1", "deploy", 2222, 10 * time.Second, filepath.Join(appConfig.HomeDirectory, ".ssh\\sshd_container"))
-	sshHost.Connect()
-	response, err := sshHost.RunCommand("cd ~ && cat /etc/passwd && pwd")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(response.Stdout)
-	fmt.Println(sshHost.IsConnectionAlive())
-	fmt.Println("Hello, World")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Get AWS regions
-	ctx := context.Background()
-	out, err := ec2.GetEc2Regions(ctx)
-	println(strings.Join(out, ", "))
+	if err := tui.Run(ctx, ec2.AgentTypeTagValue); err != nil {
+		slog.Error("tui exited with error", "error", err)
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
