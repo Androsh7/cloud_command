@@ -1,0 +1,9 @@
+# VS Code
+.vscode/
+
+# Go
+cloud_command.exe
+cloud_command
+
+# Project
+*.log
