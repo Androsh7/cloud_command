@@ -34,8 +34,16 @@ func (model Model) updateDetailKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		model.screen = screenAgents
 		return model, nil
 	case "c":
+		if err := model.checkReady([]*agent.Agent{target}); err != nil {
+			model.setStatus(err)
+			return model, nil
+		}
 		return model.openCommand([]*agent.Agent{target}, commandModeRun, screenDetail), nil
 	case "J":
+		if err := model.checkReady([]*agent.Agent{target}); err != nil {
+			model.setStatus(err)
+			return model, nil
+		}
 		return model.openCommand([]*agent.Agent{target}, commandModeJob, screenDetail), nil
 	case "j":
 		return model.openJobs(target)

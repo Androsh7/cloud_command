@@ -69,6 +69,20 @@ func (state creatingState) allLaunched() bool {
 	return true
 }
 
+// checkReady returns an error naming any target that is still being built or has no address yet.
+func (model Model) checkReady(targets []*agent.Agent) error {
+	notReady := []string{}
+	for _, target := range targets {
+		if _, building := model.creating.buildingState(target.Name()); building || target.Record.PublicIp == "" {
+			notReady = append(notReady, target.Name())
+		}
+	}
+	if len(notReady) == 0 {
+		return nil
+	}
+	return fmt.Errorf("not ready yet, wait for the build to finish: %s", strings.Join(notReady, ", "))
+}
+
 // buildingState returns the state label for an agent that is still being created, or false when it is not.
 func (state creatingState) buildingState(name string) (string, bool) {
 	if !state.active || state.errors[name] != nil {

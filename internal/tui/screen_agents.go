@@ -142,6 +142,10 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return model, nil
 		}
+		if err := model.checkReady(targets); err != nil {
+			model.setStatus(err)
+			return model, nil
+		}
 		return model.openCommand(targets, commandModeRun, screenAgents), nil
 	case "t":
 		if state.busy != "" {
@@ -236,8 +240,6 @@ func (model Model) viewAgents() string {
 		builder.WriteString(model.spinner.View() + " " + state.busy + "...\n")
 	case state.refreshing:
 		builder.WriteString(model.spinner.View() + " Refreshing agents...\n")
-	case model.creating.active:
-		builder.WriteString(model.spinner.View() + " Waiting for new agents to become ready...\n")
 	}
 
 	if len(state.agents) == 0 && !state.refreshing {
