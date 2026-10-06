@@ -53,42 +53,21 @@ type AgentNameInput struct {
 	Name string `json:"name" jsonschema:"the agent name"`
 }
 
-// CreateAgentsInput describes agents to create.
-type CreateAgentsInput struct {
-	Name         string `json:"name" jsonschema:"agent name, or the base name when count is above one (agents become name-1, name-2, ...)"`
-	Count        int    `json:"count,omitempty" jsonschema:"how many agents to create, default 1"`
+// CreateAgentInput describes one agent to create.
+type CreateAgentInput struct {
+	Name         string `json:"name" jsonschema:"agent name"`
 	Region       string `json:"region,omitempty" jsonschema:"AWS region, default from settings"`
 	InstanceType string `json:"instance_type,omitempty" jsonschema:"EC2 instance type, default from settings (t4g.nano)"`
 	Architecture string `json:"architecture,omitempty" jsonschema:"arm64 or x86_64, default from settings"`
 	Wait         *bool  `json:"wait,omitempty" jsonschema:"wait until the agents accept SSH before returning, default true; set false to return right after launch and poll with get_agent"`
 }
 
-// CreateAgentsOutput is the result of create_agents.
-type CreateAgentsOutput struct {
-	Results []control.CreateResult `json:"results"`
-}
-
-// TerminateAgentsInput names agents to destroy.
-type TerminateAgentsInput struct {
-	Names []string `json:"names" jsonschema:"names of the agents to terminate"`
-}
-
-// TerminateAgentsOutput is the result of terminate_agents.
-type TerminateAgentsOutput struct {
-	Results []control.TerminateResult `json:"results"`
-}
-
-// RunCommandInput describes a script to run on agents.
+// RunCommandInput describes a script to run on one agent.
 type RunCommandInput struct {
-	Agents         []string `json:"agents" jsonschema:"names of the agents to run the script on"`
-	Script         string   `json:"script" jsonschema:"bash script to run"`
-	Sudo           bool     `json:"sudo,omitempty" jsonschema:"run as root"`
-	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"per-agent timeout in seconds, default 120"`
-}
-
-// RunCommandOutput is the result of run_command.
-type RunCommandOutput struct {
-	Results []control.CommandResult `json:"results"`
+	Agent          string `json:"agent" jsonschema:"name of the agent to run the script on"`
+	Script         string `json:"script" jsonschema:"bash script to run"`
+	Sudo           bool   `json:"sudo,omitempty" jsonschema:"run as root"`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"timeout in seconds, default 120"`
 }
 
 // StartJobInput describes a persistent job to start.
@@ -140,40 +119,47 @@ func New(controller *control.Controller) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "create_agents",
-		Description: "Create one agent or a numbered batch of agents. Each gets its own instance and SSH key. Waits until ready unless wait is false.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateAgentsInput) (*mcp.CallToolResult, CreateAgentsOutput, error) {
+		Name:        "create_agent",
+		Description: "Create one agent with its own instance and SSH key. Waits until it accepts SSH unless wait is false.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateAgentInput) (*mcp.CallToolResult, control.CreateResult, error) {
 		wait := input.Wait == nil || *input.Wait
 		results, err := controller.CreateAgents(ctx, control.CreateRequest{
-			Name: input.Name, Count: input.Count, Region: input.Region,
+			Name: input.Name, Count: 1, Region: input.Region,
 			InstanceType: input.InstanceType, Architecture: input.Architecture, Wait: wait,
 		})
 		if err != nil {
-			return nil, CreateAgentsOutput{}, err
+			return nil, control.CreateResult{}, err
 		}
-		return nil, CreateAgentsOutput{Results: results}, nil
+		if results[0].Error != "" {
+			return nil, control.CreateResult{}, fmt.Errorf("creating agent %q: %s", input.Name, results[0].Error)
+		}
+		return nil, results[0], nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "terminate_agents",
-		Description: "Terminate agents: stop their instances, delete their SSH key pairs and remove their local records. Ask the user first.",
+		Name:        "terminate_agent",
+		Description: "Terminate one agent: stop its instance, delete its SSH key pair and remove its local record. Ask the user first.",
 		Annotations: destructive,
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input TerminateAgentsInput) (*mcp.CallToolResult, TerminateAgentsOutput, error) {
-		if len(input.Names) == 0 {
-			return nil, TerminateAgentsOutput{}, fmt.Errorf("%w: names must not be empty", control.ErrInvalidRequest)
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input AgentNameInput) (*mcp.CallToolResult, EmptyOutput, error) {
+		result := controller.TerminateAgents(ctx, []string{input.Name})[0]
+		if result.Error != "" {
+			return nil, EmptyOutput{}, fmt.Errorf("terminating agent %q: %s", input.Name, result.Error)
 		}
-		return nil, TerminateAgentsOutput{Results: controller.TerminateAgents(ctx, input.Names)}, nil
+		return nil, EmptyOutput{Ok: true}, nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "run_command",
-		Description: "Run a bash script on one or more agents and return each agent's exit code, stdout and stderr. For long work use start_job.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RunCommandInput) (*mcp.CallToolResult, RunCommandOutput, error) {
-		results, err := controller.RunCommand(ctx, input.Agents, input.Script, input.Sudo, time.Duration(input.TimeoutSeconds)*time.Second)
+		Description: "Run a bash script on one agent and return its exit code, stdout and stderr. For long work use start_job.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RunCommandInput) (*mcp.CallToolResult, control.CommandResult, error) {
+		results, err := controller.RunCommand(ctx, []string{input.Agent}, input.Script, input.Sudo, time.Duration(input.TimeoutSeconds)*time.Second)
 		if err != nil {
-			return nil, RunCommandOutput{}, err
+			return nil, control.CommandResult{}, err
 		}
-		return nil, RunCommandOutput{Results: results}, nil
+		if results[0].Error != "" {
+			return nil, control.CommandResult{}, fmt.Errorf("running command on %q: %s", input.Agent, results[0].Error)
+		}
+		return nil, results[0], nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{

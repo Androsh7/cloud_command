@@ -16,7 +16,7 @@ import (
 func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
-	server := New(control.New(agent.NewStore(t.TempDir()), config.DefaultSettings()))
+	server := New(control.New(agent.NewStore(t.TempDir()), config.DefaultSettings(), nil, "test"))
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
 		t.Fatalf("server connect: %v", err)
@@ -42,12 +42,12 @@ func TestServerListsEveryTool(t *testing.T) {
 	for _, tool := range listed.Tools {
 		names[tool.Name] = tool
 	}
-	for _, expected := range []string{"list_agents", "get_agent", "create_agents", "terminate_agents", "run_command", "start_job", "job_status", "stop_job", "remove_job"} {
+	for _, expected := range []string{"list_agents", "get_agent", "create_agent", "terminate_agent", "run_command", "start_job", "job_status", "stop_job", "remove_job"} {
 		if names[expected] == nil {
 			t.Fatalf("tool %q missing from %v", expected, names)
 		}
 	}
-	if !names["list_agents"].Annotations.ReadOnlyHint || names["terminate_agents"].Annotations.DestructiveHint == nil {
+	if !names["list_agents"].Annotations.ReadOnlyHint || names["terminate_agent"].Annotations.DestructiveHint == nil {
 		t.Fatal("annotations missing")
 	}
 }
@@ -86,10 +86,10 @@ func TestGetAgentForUnknownNameIsToolError(t *testing.T) {
 	}
 }
 
-func TestCreateAgentsRejectsBadNameAsToolError(t *testing.T) {
+func TestCreateAgentRejectsBadNameAsToolError(t *testing.T) {
 	session := connect(t)
 
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "create_agents", Arguments: map[string]any{"name": "../x"}})
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "create_agent", Arguments: map[string]any{"name": "../x"}})
 	if err != nil {
 		t.Fatalf("CallTool returned protocol error: %v", err)
 	}
