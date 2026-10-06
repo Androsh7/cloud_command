@@ -38,13 +38,13 @@ func (model Model) updateDetailKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			model.setStatus(err)
 			return model, nil
 		}
-		return model.openCommand([]*agent.Agent{target}, commandModeRun, screenDetail), nil
+		return model.openShell([]*agent.Agent{target}, screenDetail)
 	case "J":
 		if err := model.checkReady([]*agent.Agent{target}); err != nil {
 			model.setStatus(err)
 			return model, nil
 		}
-		return model.openCommand([]*agent.Agent{target}, commandModeJob, screenDetail), nil
+		return model.openJobEditor(target, screenDetail), nil
 	case "j":
 		return model.openJobs(target)
 	case "r":
@@ -55,6 +55,7 @@ func (model Model) updateDetailKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			fmt.Sprintf("Terminate agent %q (instance %s)?", target.Name(), target.Record.InstanceId),
 			screenDetail,
 			func(model Model) (Model, tea.Cmd) {
+				model.closeShell(target.Name())
 				model.agents.busy = "terminating " + target.Name()
 				model.screen = screenAgents
 				return model, tea.Batch(model.spinner.Tick, destroyAgent(model.ctx, target))

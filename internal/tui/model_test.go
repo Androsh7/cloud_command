@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -55,7 +54,7 @@ func TestWindowResizeBeforeAnyScreenDoesNotPanic(t *testing.T) {
 func TestResizeWhileEditingScriptKeepsEditorUsable(t *testing.T) {
 	model := testModel(t)
 	updated, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
-	editing := updated.(Model).openCommand([]*agent.Agent{}, commandModeRun, screenAgents)
+	editing := updated.(Model).openJobEditor(&agent.Agent{Record: agent.Record{Name: "alpha"}}, screenAgents)
 
 	resized, _ := editing.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	typed := pressKey(resized, "uname")
@@ -119,21 +118,6 @@ func TestEscapeReturnsFromCreateForm(t *testing.T) {
 
 	if updated.(Model).screen != screenAgents {
 		t.Fatalf("got screen %d, want agents", updated.(Model).screen)
-	}
-}
-
-func TestRenderResultsShowsExitCodeAndStderr(t *testing.T) {
-	results := []agent.CommandResult{{
-		AgentName: "alpha",
-		Response:  sshx.CommandResponse{Stdout: "hello\n", Stderr: "warning\n", ReturnCode: 2},
-	}}
-
-	rendered := renderResults(results, outputStreamBoth)
-
-	for _, expected := range []string{"alpha", "exit 2", "hello", "warning"} {
-		if !strings.Contains(rendered, expected) {
-			t.Fatalf("rendered output lacks %q:\n%s", expected, rendered)
-		}
 	}
 }
 
@@ -213,41 +197,6 @@ func TestControlXCancelsRunningCommand(t *testing.T) {
 	}
 }
 
-func TestOutputScreenCyclesStreams(t *testing.T) {
-	model := testModel(t)
-	results := []agent.CommandResult{{
-		AgentName: "alpha",
-		Response:  sshx.CommandResponse{Stdout: "only-out\n", Stderr: "only-err\n"},
-	}}
-	updated, _ := model.Update(commandFinishedMsg{results: results})
-
-	stdoutOnly := pressKey(updated, "o")
-	stderrOnly := pressKey(stdoutOnly, "o")
-
-	if strings.Contains(stdoutOnly.View(), "only-err") || !strings.Contains(stdoutOnly.View(), "only-out") {
-		t.Fatalf("stdout-only view wrong:\n%s", stdoutOnly.View())
-	}
-	if strings.Contains(stderrOnly.View(), "only-out") || !strings.Contains(stderrOnly.View(), "only-err") {
-		t.Fatalf("stderr-only view wrong:\n%s", stderrOnly.View())
-	}
-}
-
-func TestOutputScreenSavesResults(t *testing.T) {
-	model := testModel(t)
-	results := []agent.CommandResult{{AgentName: "alpha", Response: sshx.CommandResponse{Stdout: "hello\n"}}}
-	updated, _ := model.Update(commandFinishedMsg{results: results})
-
-	saved, _ := updated.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
-
-	notice := saved.(Model).notice
-	if !strings.HasPrefix(notice, "saved to ") {
-		t.Fatalf("got notice %q", notice)
-	}
-	if _, err := os.Stat(strings.TrimPrefix(notice, "saved to ")); err != nil {
-		t.Fatalf("saved file missing: %v", err)
-	}
-}
-
 func TestEscapeOnAgentsScreenDoesNotQuit(t *testing.T) {
 	model := testModel(t)
 
@@ -268,5 +217,67 @@ func TestCommandOnBuildingAgentIsRefused(t *testing.T) {
 
 	if updated.(Model).screen != screenAgents || !strings.Contains(updated.(Model).status, "web-1") {
 		t.Fatalf("expected to stay on agents with a warning, got screen %d status %q", updated.(Model).screen, updated.(Model).status)
+	}
+}
+
+func TestShellScreenQueuesLineWhileConnecting(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5", SshUser: "ec2-user", SshPort: 22}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	typed := pressKey(opened, "echo hi")
+
+	submitted := pressKey(typed, "enter")
+
+	host := submitted.(Model).shells["alpha"]
+	if len(host.queue) != 1 || host.queue[0] != "echo hi" {
+		t.Fatalf("line was not queued: %+v", host.queue)
+	}
+	if !strings.Contains(submitted.View(), "$ echo hi") {
+		t.Fatalf("typed line not echoed: %s", submitted.View())
+	}
+}
+
+func TestShellEventAppendsOutputToView(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+
+	updated, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "streamed-line"}})
+	finished, _ := updated.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Finished: true, ExitCode: 7}})
+
+	if !strings.Contains(finished.View(), "streamed-line") {
+		t.Fatalf("output not shown: %s", finished.View())
+	}
+	if finished.(Model).shells["alpha"].lastExit != 7 {
+		t.Fatalf("exit code not recorded: %+v", finished.(Model).shells["alpha"])
+	}
+}
+
+func TestShellViewPrefixesHostsWhenSeveral(t *testing.T) {
+	model := testModel(t)
+	targets := []*agent.Agent{
+		{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}},
+		{Record: agent.Record{Name: "bravo", PublicIp: "203.0.113.6"}},
+	}
+	opened, _ := model.openShell(targets, screenAgents)
+
+	updated, _ := opened.Update(shellEventMsg{agentName: "bravo", event: sshx.ShellEvent{Text: "from-bravo"}})
+
+	if !strings.Contains(updated.View(), "[bravo]") {
+		t.Fatalf("host prefix missing: %s", updated.View())
+	}
+}
+
+func TestShellTranscriptSurvivesLeavingScreen(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	updated, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "remembered"}})
+	left := pressKey(updated, "esc")
+
+	reopened, _ := left.(Model).openShell([]*agent.Agent{target}, screenAgents)
+
+	if left.(Model).screen != screenAgents || !strings.Contains(reopened.View(), "remembered") {
+		t.Fatalf("transcript lost: %s", reopened.View())
 	}
 }

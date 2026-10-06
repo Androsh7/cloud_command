@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/sshx"
 	"github.com/androsh7/cloud_command/pkg/systemd"
 )
 
@@ -30,9 +31,17 @@ type createFinishedMsg struct {
 	results []agent.BatchResult
 }
 
-// commandFinishedMsg carries the output of a command run on one or more agents.
-type commandFinishedMsg struct {
-	results []agent.CommandResult
+// shellOpenedMsg reports that an agent's shell connected, or failed to.
+type shellOpenedMsg struct {
+	agentName string
+	shell     *sshx.Shell
+	err       error
+}
+
+// shellEventMsg carries one streamed event from an agent's shell.
+type shellEventMsg struct {
+	agentName string
+	event     sshx.ShellEvent
 }
 
 // jobStartedMsg reports a newly started persistent job.

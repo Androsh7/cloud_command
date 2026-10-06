@@ -146,7 +146,7 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			model.setStatus(err)
 			return model, nil
 		}
-		return model.openCommand(targets, commandModeRun, screenAgents), nil
+		return model.openShell(targets, screenAgents)
 	case "t":
 		if state.busy != "" {
 			return model, nil
@@ -156,6 +156,7 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 				fmt.Sprintf("Terminate agent %q (instance %s)?", cursorAgent.Name(), cursorAgent.Record.InstanceId),
 				screenAgents,
 				func(model Model) (Model, tea.Cmd) {
+					model.closeShell(cursorAgent.Name())
 					model.agents.busy = "terminating " + cursorAgent.Name()
 					return model, tea.Batch(model.spinner.Tick, destroyAgent(model.ctx, cursorAgent))
 				},

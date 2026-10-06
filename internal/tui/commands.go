@@ -105,13 +105,6 @@ func (model Model) startCreation(ctx context.Context, spec agent.Spec, count int
 	return channel, waitFor(channel)
 }
 
-// runCommandOn runs one command on several agents at once.
-func runCommandOn(ctx context.Context, targets []*agent.Agent, command sshx.Command) tea.Cmd {
-	return func() tea.Msg {
-		return commandFinishedMsg{results: agent.RunOnMany(ctx, targets, command, 0)}
-	}
-}
-
 // startJobOn starts a persistent job on one agent.
 func startJobOn(ctx context.Context, target *agent.Agent, command sshx.Command) tea.Cmd {
 	return func() tea.Msg {

@@ -32,7 +32,7 @@ const (
 	screenDetail
 	screenCommand
 	screenCommandRunning
-	screenOutput
+	screenShell
 	screenJobs
 	screenJobDetail
 	screenConfirm
@@ -46,23 +46,25 @@ const (
 
 // Model holds the state of every screen.
 type Model struct {
-	ctx       context.Context
-	deps      Dependencies
-	screen    screen
-	width     int
-	height    int
-	spinner   spinner.Model
-	status    string
-	notice    string
-	agents    agentsState
-	create    createState
-	creating  creatingState
-	detail    detailState
-	command   commandState
-	output    outputState
-	jobs      jobsState
-	jobDetail jobDetailState
-	confirm   confirmState
+	ctx         context.Context
+	deps        Dependencies
+	screen      screen
+	width       int
+	height      int
+	spinner     spinner.Model
+	status      string
+	notice      string
+	agents      agentsState
+	create      createState
+	creating    creatingState
+	detail      detailState
+	command     commandState
+	shell       shellState
+	shells      map[string]*hostShell
+	shellEvents chan tea.Msg
+	jobs        jobsState
+	jobDetail   jobDetailState
+	confirm     confirmState
 }
 
 // New returns a model that starts on the agents screen.
@@ -79,7 +81,12 @@ func New(ctx context.Context, deps Dependencies) Model {
 		spinner: loadingSpinner,
 		agents:  newAgentsState(),
 		command: commandState{textarea: textarea.New()},
-		output:  outputState{viewport: viewport.New(defaultWidth, defaultHeight-chromeHeight)},
+		shell: shellState{
+			input:    newShellInput(),
+			viewport: viewport.New(defaultWidth, defaultHeight-chromeHeight),
+		},
+		shells:      map[string]*hostShell{},
+		shellEvents: make(chan tea.Msg, shellEventBuffer),
 		jobDetail: jobDetailState{
 			viewport: viewport.New(defaultWidth, defaultHeight-chromeHeight),
 		},
@@ -89,7 +96,7 @@ func New(ctx context.Context, deps Dependencies) Model {
 // Init starts the spinner and the first agent refresh.
 func (model Model) Init() tea.Cmd {
 	model.agents.refreshing = true
-	return tea.Batch(model.spinner.Tick, model.refreshAgents(), model.scanDetached())
+	return tea.Batch(model.spinner.Tick, model.refreshAgents(), model.scanDetached(), waitFor(model.shellEvents))
 }
 
 // Update applies one message to the model.
@@ -106,6 +113,7 @@ func (model Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, command
 	case tea.KeyMsg:
 		if message.String() == "ctrl+c" {
+			model.closeAllShells()
 			return model, tea.Quit
 		}
 		return model.handleKey(message)
@@ -128,8 +136,8 @@ func (model Model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return model.updateCommandKey(message)
 	case screenCommandRunning:
 		return model.updateCommandRunningKey(message)
-	case screenOutput:
-		return model.updateOutputKey(message)
+	case screenShell:
+		return model.updateShellKey(message)
 	case screenJobs:
 		return model.updateJobsKey(message)
 	case screenJobDetail:
@@ -151,8 +159,10 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model.applyCreateProgress(message)
 	case createFinishedMsg:
 		return model.applyCreateFinished(message)
-	case commandFinishedMsg:
-		return model.applyCommandFinished(message)
+	case shellOpenedMsg:
+		return model.applyShellOpened(message)
+	case shellEventMsg:
+		return model.applyShellEvent(message)
 	case jobStartedMsg:
 		return model.applyJobStarted(message)
 	case jobStatusesMsg:
@@ -190,8 +200,8 @@ func (model Model) View() string {
 		builder.WriteString(model.viewCommand())
 	case screenCommandRunning:
 		builder.WriteString(model.viewCommandRunning())
-	case screenOutput:
-		builder.WriteString(model.viewOutput())
+	case screenShell:
+		builder.WriteString(model.viewShell())
 	case screenJobs:
 		builder.WriteString(model.viewJobs())
 	case screenJobDetail:
@@ -217,7 +227,7 @@ func (model Model) View() string {
 func (model Model) helpLine() string {
 	switch model.screen {
 	case screenAgents:
-		return "enter: detail  n: new  b: batch  space: select  a: all  c: command  t: terminate  r: refresh  q: quit"
+		return "enter: detail  n: new  b: batch  space: select  a: all  c: shell on selection  t: terminate  r: refresh  q: quit"
 	case screenCreate:
 		return "tab/shift+tab: field  enter: create  esc: back"
 	case screenCreating:
@@ -226,13 +236,13 @@ func (model Model) helpLine() string {
 		}
 		return "esc: cancel  enter: back to agents (creation continues)"
 	case screenDetail:
-		return "c: command  J: start job  j: jobs  t: terminate  r: refresh  esc: back"
+		return "c: shell  J: start job  j: jobs  t: terminate  r: refresh  esc: back"
 	case screenCommand:
-		return "ctrl+r: run  ctrl+s: toggle sudo  esc: back"
+		return "ctrl+r: start job  ctrl+s: toggle sudo  esc: back"
 	case screenCommandRunning:
 		return "ctrl+x: cancel"
-	case screenOutput:
-		return "up/down/pgup/pgdn: scroll  o: stdout/stderr  ctrl+s: save  esc: back"
+	case screenShell:
+		return "enter: send  up/down: history  pgup/pgdn: scroll  ctrl+x: interrupt  ctrl+l: clear  ctrl+s: save  esc: back (shell stays open)"
 	case screenJobs:
 		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
 	case screenJobDetail:
@@ -252,8 +262,7 @@ func (model Model) contentHeight() int {
 func (model *Model) resizeComponents() {
 	model.command.textarea.SetWidth(max(model.width-4, 20))
 	model.command.textarea.SetHeight(max(model.contentHeight()-6, 3))
-	model.output.viewport.Width = model.width
-	model.output.viewport.Height = model.contentHeight() - 2
+	model.layoutShell()
 	model.jobDetail.viewport.Width = model.width
 	model.jobDetail.viewport.Height = max(model.contentHeight()-6, 3)
 }

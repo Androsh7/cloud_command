@@ -1,6 +1,6 @@
 # cloud_command
 
-A terminal interface for running work on disposable AWS EC2 agents. It creates agents (one or a batch), runs shell commands on one or many of them over SSH, starts persistent commands as `systemd-run` units, and tears everything down again.
+A terminal interface for running work on disposable AWS EC2 agents. It creates agents (one or a batch), opens persistent bash shells on one or many of them over SSH, starts persistent commands as `systemd-run` units, and tears everything down again.
 
 ## Requirements
 
@@ -46,13 +46,12 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 
 | Screen | Keys |
 | --- | --- |
-| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` run command on selection, `t` terminate, `r` refresh, `q` quit |
+| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` shell on selection, `t` terminate, `r` refresh, `q` quit |
 | Create form | `tab` / `shift+tab` move between fields, `enter` create, `esc` back |
 | Creating | `esc` cancel, `enter` back when finished |
-| Detail | `c` run command, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
-| Command editor | `ctrl+r` run, `ctrl+s` toggle sudo, `esc` back |
-| Running | `ctrl+x` cancel the command on every agent |
-| Output | arrow keys scroll, `o` cycle stdout + stderr / stdout / stderr, `ctrl+s` save, `esc` back |
+| Detail | `c` shell, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
+| Shell | `enter` send the line to every host, `up`/`down` history, `pgup`/`pgdn` scroll, `ctrl+x` interrupt (Ctrl-C), `ctrl+l` clear, `ctrl+s` save transcripts, `esc` back (shells stay open) |
+| Job editor | `ctrl+r` start job, `ctrl+s` toggle sudo, `esc` back |
 | Jobs | `enter` detail, `s` stop, `d` stop and remove, `r` refresh, `esc` back |
 | Job detail | `o` switch stdout/stderr, `s` stop, `r` refresh, `esc` back |
 
@@ -60,9 +59,11 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 
 The agents screen also lists instances tagged `Type=cloud_command` that have no local record. They can be terminated with `t`.
 
-## Saving command output
+## Shells
 
-`ctrl+s` on the output screen writes under `~/.cloud_command/output/`. A command run on one agent is saved as `<timestamp>-<agent>.txt`; a command run on several agents is saved as a directory `<timestamp>/` with one `<agent>.txt` per agent. Each file holds the exit code, the standard output and the standard error.
+`c` opens a persistent `/bin/bash` on each selected agent under a pseudo-terminal. Working directory, variables and exports survive between commands, and the shell stays open when you leave the screen. Stdout and stderr stream into the view as they arrive; when several hosts are open each line is prefixed with `[host]`. Every line you type is sent to every host, and the per-host status shows `running` or `idle (exit N)`. `ctrl+x` sends Ctrl-C to the foreground command on every host. If a shell exits (for example after `exit`), the next line you send reopens it.
+
+`ctrl+s` saves the transcripts under `~/.cloud_command/output/`: one host is saved as `<timestamp>-<agent>.txt`, several as a `<timestamp>/` directory with one `<agent>.txt` per host.
 
 ## Persistent jobs
 

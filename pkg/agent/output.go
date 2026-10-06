@@ -15,42 +15,27 @@ const (
 	outputFolderPermissions = 0o700
 )
 
-// FormatCommandResult returns the plain text saved for one agent's result.
-func FormatCommandResult(result CommandResult) string {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "agent: %s\n", result.AgentName)
-	if result.Err != nil {
-		fmt.Fprintf(&builder, "error: %s\n", result.Err.Error())
-		return builder.String()
-	}
-	fmt.Fprintf(&builder, "exit code: %d\n\n--- stdout ---\n", result.Response.ReturnCode)
-	builder.WriteString(result.Response.Stdout)
-	if result.Response.Stdout != "" && !strings.HasSuffix(result.Response.Stdout, "\n") {
-		builder.WriteString("\n")
-	}
-	builder.WriteString("\n--- stderr ---\n")
-	builder.WriteString(result.Response.Stderr)
-	if result.Response.Stderr != "" && !strings.HasSuffix(result.Response.Stderr, "\n") {
-		builder.WriteString("\n")
-	}
-	return builder.String()
+// Transcript is the text captured from one agent's shell.
+type Transcript struct {
+	AgentName string
+	Lines     []string
 }
 
-// WriteCommandResults saves results under a directory and returns the path written.
-// One result becomes a single file named <timestamp>-<agent>.txt; several become a <timestamp> directory with one file per agent.
-func WriteCommandResults(outputDirectory string, results []CommandResult, finished time.Time) (string, error) {
-	if len(results) == 0 {
-		return "", fmt.Errorf("no results to save")
+// WriteTranscripts saves transcripts under a directory and returns the path written.
+// One transcript becomes a single file named <timestamp>-<agent>.txt; several become a <timestamp> directory with one file per agent.
+func WriteTranscripts(outputDirectory string, transcripts []Transcript, finished time.Time) (string, error) {
+	if len(transcripts) == 0 {
+		return "", fmt.Errorf("no transcripts to save")
 	}
 	if err := os.MkdirAll(outputDirectory, outputFolderPermissions); err != nil {
 		return "", fmt.Errorf("creating output directory %q: %w", outputDirectory, err)
 	}
 	timestamp := finished.Local().Format(outputTimestampLayout)
 
-	if len(results) == 1 {
-		path := filepath.Join(outputDirectory, timestamp+"-"+results[0].AgentName+outputFileExtension)
-		if err := os.WriteFile(path, []byte(FormatCommandResult(results[0])), outputFilePermissions); err != nil {
-			return "", fmt.Errorf("writing output %q: %w", path, err)
+	if len(transcripts) == 1 {
+		path := filepath.Join(outputDirectory, timestamp+"-"+transcripts[0].AgentName+outputFileExtension)
+		if err := writeTranscript(path, transcripts[0]); err != nil {
+			return "", err
 		}
 		return path, nil
 	}
@@ -59,11 +44,19 @@ func WriteCommandResults(outputDirectory string, results []CommandResult, finish
 	if err := os.MkdirAll(directory, outputFolderPermissions); err != nil {
 		return "", fmt.Errorf("creating output directory %q: %w", directory, err)
 	}
-	for _, result := range results {
-		path := filepath.Join(directory, result.AgentName+outputFileExtension)
-		if err := os.WriteFile(path, []byte(FormatCommandResult(result)), outputFilePermissions); err != nil {
-			return "", fmt.Errorf("writing output %q: %w", path, err)
+	for _, transcript := range transcripts {
+		if err := writeTranscript(filepath.Join(directory, transcript.AgentName+outputFileExtension), transcript); err != nil {
+			return "", err
 		}
 	}
 	return directory, nil
+}
+
+// writeTranscript writes one transcript's lines to a file.
+func writeTranscript(path string, transcript Transcript) error {
+	content := strings.Join(transcript.Lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), outputFilePermissions); err != nil {
+		return fmt.Errorf("writing transcript %q: %w", path, err)
+	}
+	return nil
 }
