@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -22,6 +24,28 @@ const (
 
 const scriptCharacterLimit = 0
 
+// outputStream selects which streams the output screen shows.
+type outputStream int
+
+const (
+	outputStreamBoth outputStream = iota
+	outputStreamStdout
+	outputStreamStderr
+	outputStreamCount
+)
+
+// label returns the name of the stream filter for the header.
+func (stream outputStream) label() string {
+	switch stream {
+	case outputStreamStdout:
+		return "stdout only"
+	case outputStreamStderr:
+		return "stderr only"
+	default:
+		return "stdout + stderr"
+	}
+}
+
 // commandState holds the script editor.
 type commandState struct {
 	textarea textarea.Model
@@ -29,6 +53,7 @@ type commandState struct {
 	mode     commandMode
 	targets  []*agent.Agent
 	returnTo screen
+	cancel   context.CancelFunc
 }
 
 // outputState holds the results of the last command run.
@@ -36,6 +61,8 @@ type outputState struct {
 	viewport viewport.Model
 	results  []agent.CommandResult
 	returnTo screen
+	stream   outputStream
+	finished time.Time
 }
 
 // openCommand switches to the script editor for the given targets.
@@ -80,28 +107,51 @@ func (model Model) submitCommand() (tea.Model, tea.Cmd) {
 		return model, nil
 	}
 	command := sshx.Command{Script: script, Sudo: state.sudo}
+	runCtx, cancel := context.WithCancel(model.ctx)
+	model.command.cancel = cancel
 	model.screen = screenCommandRunning
 	model.setStatus(nil)
 	if state.mode == commandModeJob {
-		return model, tea.Batch(model.spinner.Tick, startJobOn(model.ctx, state.targets[0], command))
+		return model, tea.Batch(model.spinner.Tick, startJobOn(runCtx, state.targets[0], command))
 	}
-	return model, tea.Batch(model.spinner.Tick, runCommandOn(model.ctx, state.targets, command))
+	return model, tea.Batch(model.spinner.Tick, runCommandOn(runCtx, state.targets, command))
+}
+
+// updateCommandRunningKey handles a key press while a command runs.
+func (model Model) updateCommandRunningKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if message.String() == "ctrl+x" && model.command.cancel != nil {
+		model.command.cancel()
+		model.notice = "cancelling..."
+	}
+	return model, nil
+}
+
+// finishRun releases the run context once results have arrived.
+func (model *Model) finishRun() {
+	if model.command.cancel != nil {
+		model.command.cancel()
+		model.command.cancel = nil
+	}
+	model.notice = ""
 }
 
 // applyCommandFinished shows the output screen.
 func (model Model) applyCommandFinished(message commandFinishedMsg) (tea.Model, tea.Cmd) {
+	model.finishRun()
 	model.output = outputState{
 		viewport: viewport.New(model.width, model.contentHeight()-2),
 		results:  message.results,
 		returnTo: model.command.returnTo,
+		finished: time.Now(),
 	}
-	model.output.viewport.SetContent(renderResults(message.results))
+	model.output.viewport.SetContent(renderResults(message.results, outputStreamBoth))
 	model.screen = screenOutput
 	return model, nil
 }
 
 // applyJobStarted returns to the jobs screen after a job starts.
 func (model Model) applyJobStarted(message jobStartedMsg) (tea.Model, tea.Cmd) {
+	model.finishRun()
 	if message.err != nil {
 		model.setStatus(message.err)
 		model.screen = screenCommand
@@ -114,8 +164,8 @@ func (model Model) applyJobStarted(message jobStartedMsg) (tea.Model, tea.Cmd) {
 	return model.openJobs(model.detail.agent)
 }
 
-// renderResults formats one section per agent.
-func renderResults(results []agent.CommandResult) string {
+// renderResults formats one section per agent, showing the selected streams.
+func renderResults(results []agent.CommandResult, stream outputStream) string {
 	var builder strings.Builder
 	for _, result := range results {
 		switch {
@@ -129,16 +179,15 @@ func renderResults(results []agent.CommandResult) string {
 			}
 			builder.WriteString(style.Render(fmt.Sprintf("== %s (exit %d) ==", result.AgentName, result.Response.ReturnCode)))
 			builder.WriteString("\n")
-			builder.WriteString(result.Response.Stdout)
-			if !strings.HasSuffix(result.Response.Stdout, "\n") && result.Response.Stdout != "" {
-				builder.WriteString("\n")
+			if stream != outputStreamStderr {
+				writeStream(&builder, result.Response.Stdout)
 			}
-			if result.Response.Stderr != "" {
-				builder.WriteString(dimStyle.Render("-- stderr --"))
-				builder.WriteString("\n" + result.Response.Stderr)
-				if !strings.HasSuffix(result.Response.Stderr, "\n") {
+			if stream != outputStreamStdout && result.Response.Stderr != "" {
+				if stream == outputStreamBoth {
+					builder.WriteString(dimStyle.Render("-- stderr --"))
 					builder.WriteString("\n")
 				}
+				writeStream(&builder, result.Response.Stderr)
 			}
 			builder.WriteString("\n")
 		}
@@ -146,11 +195,33 @@ func renderResults(results []agent.CommandResult) string {
 	return builder.String()
 }
 
+// writeStream appends text and makes sure it ends with a newline.
+func writeStream(builder *strings.Builder, text string) {
+	builder.WriteString(text)
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		builder.WriteString("\n")
+	}
+}
+
 // updateOutputKey handles a key press on the output screen.
 func (model Model) updateOutputKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch message.String() {
 	case "esc", "q", "enter":
+		model.notice = ""
 		model.screen = model.output.returnTo
+		return model, nil
+	case "o":
+		model.output.stream = (model.output.stream + 1) % outputStreamCount
+		model.output.viewport.SetContent(renderResults(model.output.results, model.output.stream))
+		return model, nil
+	case "ctrl+s":
+		savedPath, err := agent.WriteCommandResults(model.deps.Paths.OutputDirectory, model.output.results, model.output.finished)
+		if err != nil {
+			model.setStatus(err)
+			return model, nil
+		}
+		model.setStatus(nil)
+		model.notice = "saved to " + savedPath
 		return model, nil
 	}
 	var command tea.Cmd
@@ -194,13 +265,15 @@ func (model Model) viewCommandRunning() string {
 	if state.mode == commandModeJob {
 		return model.spinner.View() + " Starting job on " + targetNames(state.targets) + "...\n"
 	}
-	return model.spinner.View() + fmt.Sprintf(" Running on %d agent(s)...\n", len(state.targets))
+	return model.spinner.View() + fmt.Sprintf(" Running on %d agent(s)... (ctrl+x to cancel)\n", len(state.targets))
 }
 
 // viewOutput renders the scrolling command output.
 func (model Model) viewOutput() string {
 	var builder strings.Builder
 	builder.WriteString(headerStyle.Render(fmt.Sprintf("Output (%d agent(s))", len(model.output.results))))
+	builder.WriteString("  ")
+	builder.WriteString(dimStyle.Render(model.output.stream.label()))
 	builder.WriteString("\n")
 	builder.WriteString(model.output.viewport.View())
 	builder.WriteString("\n")

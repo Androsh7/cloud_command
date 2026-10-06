@@ -53,6 +53,7 @@ type Model struct {
 	height    int
 	spinner   spinner.Model
 	status    string
+	notice    string
 	agents    agentsState
 	create    createState
 	creating  creatingState
@@ -126,7 +127,7 @@ func (model Model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenCommand:
 		return model.updateCommandKey(message)
 	case screenCommandRunning:
-		return model, nil
+		return model.updateCommandRunningKey(message)
 	case screenOutput:
 		return model.updateOutputKey(message)
 	case screenJobs:
@@ -203,6 +204,10 @@ func (model Model) View() string {
 		builder.WriteString(errorStyle.Render(model.status))
 		builder.WriteString("\n")
 	}
+	if model.notice != "" {
+		builder.WriteString(successStyle.Render(model.notice))
+		builder.WriteString("\n")
+	}
 	builder.WriteString(dimStyle.Render(model.helpLine()))
 	builder.WriteString("\n")
 	return builder.String()
@@ -225,9 +230,9 @@ func (model Model) helpLine() string {
 	case screenCommand:
 		return "ctrl+r: run  ctrl+s: toggle sudo  esc: back"
 	case screenCommandRunning:
-		return "running..."
+		return "ctrl+x: cancel"
 	case screenOutput:
-		return "up/down/pgup/pgdn: scroll  esc: back"
+		return "up/down/pgup/pgdn: scroll  o: stdout/stderr  ctrl+s: save  esc: back"
 	case screenJobs:
 		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
 	case screenJobDetail:

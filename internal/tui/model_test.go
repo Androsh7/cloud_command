@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -127,7 +128,7 @@ func TestRenderResultsShowsExitCodeAndStderr(t *testing.T) {
 		Response:  sshx.CommandResponse{Stdout: "hello\n", Stderr: "warning\n", ReturnCode: 2},
 	}}
 
-	rendered := renderResults(results)
+	rendered := renderResults(results, outputStreamBoth)
 
 	for _, expected := range []string{"alpha", "exit 2", "hello", "warning"} {
 		if !strings.Contains(rendered, expected) {
@@ -196,5 +197,53 @@ func TestBuildingStateBeforeLaunchIsBuilding(t *testing.T) {
 
 	if !building || label != "building" {
 		t.Fatalf("got %q %v", label, building)
+	}
+}
+
+func TestControlXCancelsRunningCommand(t *testing.T) {
+	model := testModel(t)
+	cancelled := false
+	model.screen = screenCommandRunning
+	model.command.cancel = func() { cancelled = true }
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	if !cancelled || updated.(Model).notice == "" {
+		t.Fatal("expected the run context to be cancelled and a notice shown")
+	}
+}
+
+func TestOutputScreenCyclesStreams(t *testing.T) {
+	model := testModel(t)
+	results := []agent.CommandResult{{
+		AgentName: "alpha",
+		Response:  sshx.CommandResponse{Stdout: "only-out\n", Stderr: "only-err\n"},
+	}}
+	updated, _ := model.Update(commandFinishedMsg{results: results})
+
+	stdoutOnly := pressKey(updated, "o")
+	stderrOnly := pressKey(stdoutOnly, "o")
+
+	if strings.Contains(stdoutOnly.View(), "only-err") || !strings.Contains(stdoutOnly.View(), "only-out") {
+		t.Fatalf("stdout-only view wrong:\n%s", stdoutOnly.View())
+	}
+	if strings.Contains(stderrOnly.View(), "only-out") || !strings.Contains(stderrOnly.View(), "only-err") {
+		t.Fatalf("stderr-only view wrong:\n%s", stderrOnly.View())
+	}
+}
+
+func TestOutputScreenSavesResults(t *testing.T) {
+	model := testModel(t)
+	results := []agent.CommandResult{{AgentName: "alpha", Response: sshx.CommandResponse{Stdout: "hello\n"}}}
+	updated, _ := model.Update(commandFinishedMsg{results: results})
+
+	saved, _ := updated.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	notice := saved.(Model).notice
+	if !strings.HasPrefix(notice, "saved to ") {
+		t.Fatalf("got notice %q", notice)
+	}
+	if _, err := os.Stat(strings.TrimPrefix(notice, "saved to ")); err != nil {
+		t.Fatalf("saved file missing: %v", err)
 	}
 }

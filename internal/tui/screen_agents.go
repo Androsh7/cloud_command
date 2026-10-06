@@ -236,6 +236,8 @@ func (model Model) viewAgents() string {
 		builder.WriteString(model.spinner.View() + " " + state.busy + "...\n")
 	case state.refreshing:
 		builder.WriteString(model.spinner.View() + " Refreshing agents...\n")
+	case model.creating.active:
+		builder.WriteString(model.spinner.View() + " Waiting for new agents to become ready...\n")
 	}
 
 	if len(state.agents) == 0 && !state.refreshing {
@@ -271,6 +273,10 @@ func (model Model) viewAgents() string {
 	}
 	if state.scanning {
 		builder.WriteString(model.spinner.View() + " Scanning every region...\n")
+	}
+	if len(unmanaged) > 0 {
+		builder.WriteString(dimStyle.Render(fmt.Sprintf("      %-22s %-14s %-16s %s", "INSTANCE", "STATE", "REGION", "KEY PAIR")))
+		builder.WriteString("\n")
 	}
 	for index, detached := range unmanaged {
 		line := fmt.Sprintf("    %-22s %-14s %-16s %s", detached.Id, detached.State, detached.Region, detached.KeyPair)

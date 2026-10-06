@@ -51,13 +51,18 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 | Creating | `esc` cancel, `enter` back when finished |
 | Detail | `c` run command, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
 | Command editor | `ctrl+r` run, `ctrl+s` toggle sudo, `esc` back |
-| Output | arrow keys scroll, `esc` back |
+| Running | `ctrl+x` cancel the command on every agent |
+| Output | arrow keys scroll, `o` cycle stdout + stderr / stdout / stderr, `ctrl+s` save, `esc` back |
 | Jobs | `enter` detail, `s` stop, `d` stop and remove, `r` refresh, `esc` back |
 | Job detail | `o` switch stdout/stderr, `s` stop, `r` refresh, `esc` back |
 
 `ctrl+c` quits from any screen.
 
 The agents screen also lists instances tagged `Type=cloud_command` that have no local record. They can be terminated with `t`.
+
+## Saving command output
+
+`ctrl+s` on the output screen writes under `~/.cloud_command/output/`. A command run on one agent is saved as `<timestamp>-<agent>.txt`; a command run on several agents is saved as a directory `<timestamp>/` with one `<agent>.txt` per agent. Each file holds the exit code, the standard output and the standard error.
 
 ## Persistent jobs
 

@@ -17,6 +17,7 @@ const (
 	RootDirectoryName   = ".cloud_command"
 	SettingsFileName    = "settings.toml"
 	AgentsDirectoryName = "agents"
+	OutputDirectoryName = "output"
 	LogFileName         = "cloud_command.log"
 
 	DefaultRegion              = "us-east-1"
@@ -38,6 +39,7 @@ const (
 type Paths struct {
 	RootDirectory   string
 	AgentsDirectory string
+	OutputDirectory string
 	SettingsPath    string
 	LogPath         string
 }
@@ -114,6 +116,7 @@ func PathsUnder(rootDirectory string) Paths {
 	return Paths{
 		RootDirectory:   rootDirectory,
 		AgentsDirectory: filepath.Join(rootDirectory, AgentsDirectoryName),
+		OutputDirectory: filepath.Join(rootDirectory, OutputDirectoryName),
 		SettingsPath:    filepath.Join(rootDirectory, SettingsFileName),
 		LogPath:         filepath.Join(rootDirectory, LogFileName),
 	}
@@ -121,7 +124,7 @@ func PathsUnder(rootDirectory string) Paths {
 
 // EnsureDirectories creates the root and agents directories when they are missing.
 func EnsureDirectories(paths Paths) error {
-	for _, directory := range []string{paths.RootDirectory, paths.AgentsDirectory} {
+	for _, directory := range []string{paths.RootDirectory, paths.AgentsDirectory, paths.OutputDirectory} {
 		if err := os.MkdirAll(directory, directoryPermissions); err != nil {
 			return fmt.Errorf("creating directory %q: %w", directory, err)
 		}
