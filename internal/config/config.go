@@ -18,6 +18,7 @@ const (
 	SettingsFileName    = "settings.toml"
 	AgentsDirectoryName = "agents"
 	OutputDirectoryName = "output"
+	HistoryFileName     = "history.toml"
 	LogFileName         = "cloud_command.log"
 
 	DefaultRegion               = "us-east-1"
@@ -42,6 +43,7 @@ type Paths struct {
 	AgentsDirectory string
 	OutputDirectory string
 	SettingsPath    string
+	HistoryPath     string
 	LogPath         string
 }
 
@@ -121,6 +123,7 @@ func PathsUnder(rootDirectory string) Paths {
 		AgentsDirectory: filepath.Join(rootDirectory, AgentsDirectoryName),
 		OutputDirectory: filepath.Join(rootDirectory, OutputDirectoryName),
 		SettingsPath:    filepath.Join(rootDirectory, SettingsFileName),
+		HistoryPath:     filepath.Join(rootDirectory, HistoryFileName),
 		LogPath:         filepath.Join(rootDirectory, LogFileName),
 	}
 }
