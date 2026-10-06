@@ -257,3 +257,16 @@ func TestEscapeOnAgentsScreenDoesNotQuit(t *testing.T) {
 		t.Fatal("escape on the agents screen should do nothing")
 	}
 }
+
+func TestCommandOnBuildingAgentIsRefused(t *testing.T) {
+	model := testModel(t)
+	building := &agent.Agent{Record: agent.Record{Name: "web-1", InstanceId: "i-1"}}
+	model.creating = creatingState{active: true, steps: map[string]agent.Step{"web-1": agent.StepWaitSsh}, errors: map[string]error{}}
+	updated, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{building}, infos: map[string]ec2.InstanceInfo{}})
+
+	updated = pressKey(updated, "c")
+
+	if updated.(Model).screen != screenAgents || !strings.Contains(updated.(Model).status, "web-1") {
+		t.Fatalf("expected to stay on agents with a warning, got screen %d status %q", updated.(Model).screen, updated.(Model).status)
+	}
+}
