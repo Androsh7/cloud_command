@@ -1,9 +1,7 @@
-BINARY := cloud_command
-
 .PHONY: build run vet test test-live-ssh test-live-aws fmt sshd-up sshd-down
 
 build:
-	go build -o $(BINARY) ./cmd/cloud_command
+	go build -ldflags="-s -w" ./cmd/cloud_command
 
 run:
 	go run ./cmd/cloud_command
