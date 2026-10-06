@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/androsh7/cloud_command/internal/config"
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 )
 
@@ -116,11 +118,37 @@ type JobOutput struct {
 type Controller struct {
 	Store    *agent.Store
 	Settings config.Settings
+	History  *history.Store
+	Source   history.Source
 }
 
-// New returns a controller for a store.
-func New(store *agent.Store, settings config.Settings) *Controller {
-	return &Controller{Store: store, Settings: settings}
+// New returns a controller for a store that records what it runs under the given source.
+func New(store *agent.Store, settings config.Settings, historyStore *history.Store, source history.Source) *Controller {
+	return &Controller{Store: store, Settings: settings, History: historyStore, Source: source}
+}
+
+// record appends a history entry when a history store is configured.
+func (controller *Controller) record(entry history.Entry) history.Entry {
+	if controller.History == nil {
+		return entry
+	}
+	entry.Source = controller.Source
+	recorded, err := controller.History.Record(entry)
+	if err != nil {
+		slog.Warn("recording history failed", "error", err)
+		return entry
+	}
+	return recorded
+}
+
+// finish stores the outcome of an earlier history entry.
+func (controller *Controller) finish(entry history.Entry, exitCode *int, failure string) {
+	if controller.History == nil || entry.Id == "" {
+		return
+	}
+	if err := controller.History.SetResult(entry.Id, exitCode, failure); err != nil {
+		slog.Warn("updating history failed", "error", err)
+	}
 }
 
 // createOptions builds the timeouts from the settings.
@@ -358,9 +386,11 @@ func (controller *Controller) RunCommand(ctx context.Context, names []string, sc
 		go func(index int, name string) {
 			defer waitGroup.Done()
 			results[index] = CommandResult{Agent: name}
+			entry := controller.record(history.Entry{Agent: name, Kind: history.KindCommand, Script: script, Sudo: sudo})
 			loaded, err := controller.load(name)
 			if err != nil {
 				results[index].Error = err.Error()
+				controller.finish(entry, nil, err.Error())
 				return
 			}
 			runCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -369,8 +399,11 @@ func (controller *Controller) RunCommand(ctx context.Context, names []string, sc
 			_ = loaded.Disconnect()
 			if err != nil {
 				results[index].Error = err.Error()
+				controller.finish(entry, nil, err.Error())
 				return
 			}
+			exitCode := response.ReturnCode
+			controller.finish(entry, &exitCode, "")
 			results[index].ExitCode = response.ReturnCode
 			results[index].Stdout = response.Stdout
 			results[index].Stderr = response.Stderr
@@ -392,8 +425,10 @@ func (controller *Controller) StartJob(ctx context.Context, name string, script 
 	defer loaded.Disconnect()
 	job, err := loaded.StartJob(ctx, sshx.Command{Script: script, Sudo: sudo})
 	if err != nil {
+		controller.record(history.Entry{Agent: name, Kind: history.KindJob, Script: script, Sudo: sudo, Error: err.Error()})
 		return JobSummary{}, err
 	}
+	controller.record(history.Entry{Agent: name, Kind: history.KindJob, Script: script, Sudo: sudo, JobId: job.Id})
 	return JobSummary{Id: job.Id, Script: job.Script, Sudo: job.Sudo, StartedAt: job.StartedAt, Status: "running", Running: true}, nil
 }
 

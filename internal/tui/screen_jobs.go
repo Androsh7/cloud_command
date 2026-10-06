@@ -289,7 +289,7 @@ func (model Model) applyJobPoll(message jobPollMsg) (tea.Model, tea.Cmd) {
 	return model, loadJobDetail(model.ctx, model.detail.agent, model.jobDetail.job, model.jobDetail.generation)
 }
 
-// viewJobDetail renders one job's status and output.
+// viewJobDetail renders one job's status, full script and output.
 func (model Model) viewJobDetail() string {
 	state := model.jobDetail
 	var builder strings.Builder
@@ -299,10 +299,16 @@ func (model Model) viewJobDetail() string {
 	for _, row := range [][2]string{
 		{"  Status   ", statusText},
 		{"  Started  ", state.job.StartedAt.Local().Format(timestampLayout)},
-		{"  Script   ", previewScript(state.job.Script)},
 	} {
 		builder.WriteString(labelStyle.Render(row[0]))
 		builder.WriteString(row[1])
+		builder.WriteString("\n")
+	}
+	builder.WriteString(labelStyle.Render("  Script"))
+	builder.WriteString("\n")
+	for _, line := range strings.Split(strings.TrimRight(state.job.Script, "\n"), "\n") {
+		builder.WriteString("    ")
+		builder.WriteString(line)
 		builder.WriteString("\n")
 	}
 	stream := "stdout"

@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/androsh7/cloud_command/pkg/agent"
+	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 )
 
@@ -63,6 +64,7 @@ type hostShell struct {
 	shell      *sshx.Shell
 	opening    bool
 	pending    int
+	pendingIds []string
 	lastExit   int
 	hasExit    bool
 	queue      []string
@@ -448,6 +450,7 @@ func (model *Model) sendToHost(host *hostShell, line string) {
 		return
 	}
 	host.pending++
+	host.pendingIds = append(host.pendingIds, model.recordHistory(history.Entry{Agent: host.agent.Name(), Kind: history.KindCommand, Source: history.SourceTui, Script: line}))
 }
 
 // interruptShells sends Ctrl-C to every open shell in the current view.
@@ -538,6 +541,10 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 			return model, next
 		}
 		host.pending--
+		if len(host.pendingIds) > 0 {
+			model.finishHistory(host.pendingIds[0], event.ExitCode)
+			host.pendingIds = host.pendingIds[1:]
+		}
 		host.lastExit = event.ExitCode
 		host.hasExit = true
 		statusLine := shellLine{agentName: message.agentName, text: fmt.Sprintf("[exit %d]", event.ExitCode), isStatus: true}

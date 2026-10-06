@@ -134,6 +134,8 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return model.openCreate(false), nil
 	case "b":
 		return model.openCreate(true), nil
+	case "h":
+		return model.openHistory()
 	case "enter":
 		if cursorAgent := state.cursorAgent(); cursorAgent != nil {
 			return model.openDetail(cursorAgent), nil

@@ -69,7 +69,7 @@ func (model Model) submitJob() (tea.Model, tea.Cmd) {
 	model.command.cancel = cancel
 	model.screen = screenCommandRunning
 	model.setStatus(nil)
-	return model, tea.Batch(model.spinner.Tick, startJobOn(runCtx, state.target, command))
+	return model, tea.Batch(model.spinner.Tick, startJobOn(runCtx, state.target, command, model.deps.History))
 }
 
 // updateCommandRunningKey handles a key press while a job is being started.

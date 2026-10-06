@@ -16,6 +16,7 @@ import (
 	"github.com/androsh7/cloud_command/internal/tui"
 	"github.com/androsh7/cloud_command/internal/version"
 	"github.com/androsh7/cloud_command/pkg/agent"
+	"github.com/androsh7/cloud_command/pkg/history"
 )
 
 const logFilePermissions = 0o600
@@ -25,6 +26,7 @@ type application struct {
 	paths      config.Paths
 	settings   config.Settings
 	store      *agent.Store
+	history    *history.Store
 	controller *control.Controller
 	closeLog   func()
 }
@@ -46,7 +48,7 @@ func newRootCommand() *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(command *cobra.Command, _ []string) error {
 			return withApplication(command.Context(), func(ctx context.Context, app *application) error {
-				deps := tui.Dependencies{Settings: app.settings, Store: app.store, Paths: app.paths}
+				deps := tui.Dependencies{Settings: app.settings, Store: app.store, Paths: app.paths, History: app.history}
 				if err := tui.Run(ctx, deps); err != nil {
 					slog.Error("tui exited with error", "error", err)
 					return err
@@ -96,11 +98,13 @@ func bootstrap() (*application, error) {
 		AddSource: true,
 	})))
 	store := agent.NewStore(paths.AgentsDirectory)
+	historyStore := history.NewStore(paths.HistoryPath)
 	return &application{
 		paths:      paths,
 		settings:   settings,
 		store:      store,
-		controller: control.New(store, settings),
+		history:    historyStore,
+		controller: control.New(store, settings, historyStore, history.SourceCli),
 		closeLog:   func() { _ = logFile.Close() },
 	}, nil
 }

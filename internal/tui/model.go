@@ -15,6 +15,7 @@ import (
 	"github.com/androsh7/cloud_command/internal/config"
 	"github.com/androsh7/cloud_command/internal/version"
 	"github.com/androsh7/cloud_command/pkg/agent"
+	"github.com/androsh7/cloud_command/pkg/history"
 )
 
 // Dependencies holds everything the interface needs from the rest of the application.
@@ -22,6 +23,7 @@ type Dependencies struct {
 	Settings config.Settings
 	Store    *agent.Store
 	Paths    config.Paths
+	History  *history.Store
 }
 
 // screen identifies which view is active.
@@ -37,6 +39,8 @@ const (
 	screenShell
 	screenJobs
 	screenJobDetail
+	screenHistory
+	screenHistoryDetail
 	screenConfirm
 )
 
@@ -74,6 +78,7 @@ type Model struct {
 	shellEvents       chan tea.Msg
 	jobs              jobsState
 	jobDetail         jobDetailState
+	history           historyState
 	confirm           confirmState
 }
 
@@ -172,6 +177,10 @@ func (model Model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return model.updateJobsKey(message)
 	case screenJobDetail:
 		return model.updateJobDetailKey(message)
+	case screenHistory:
+		return model.updateHistoryKey(message)
+	case screenHistoryDetail:
+		return model.updateHistoryDetailKey(message)
 	case screenConfirm:
 		return model.updateConfirmKey(message)
 	}
@@ -205,6 +214,8 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model.applyJobPoll(message)
 	case jobActionMsg:
 		return model.applyJobAction(message)
+	case historyLoadedMsg:
+		return model.applyHistoryLoaded(message)
 	case terminateFinishedMsg:
 		return model.applyTerminateFinished(message)
 	case errorMsg:
@@ -242,6 +253,10 @@ func (model Model) View() string {
 		builder.WriteString(model.viewJobs())
 	case screenJobDetail:
 		builder.WriteString(model.viewJobDetail())
+	case screenHistory:
+		builder.WriteString(model.viewHistory())
+	case screenHistoryDetail:
+		builder.WriteString(model.viewHistoryDetail())
 	case screenConfirm:
 		builder.WriteString(model.viewConfirm())
 	}
@@ -263,7 +278,7 @@ func (model Model) View() string {
 func (model Model) helpLine() string {
 	switch model.screen {
 	case screenAgents:
-		return "enter: detail  n: new  b: batch  space: select  a: all  c: shell on selection  t: terminate selection  r: refresh  q: quit"
+		return "enter: detail  n: new  b: batch  space: select  a: all  c: shell on selection  t: terminate selection  h: history  r: refresh  q: quit"
 	case screenCreate:
 		return "tab/shift+tab: field  enter: create  esc: back"
 	case screenCreating:
@@ -283,6 +298,10 @@ func (model Model) helpLine() string {
 		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
 	case screenJobDetail:
 		return "o: toggle stdout/stderr  s: stop  r: refresh  esc: back"
+	case screenHistory:
+		return "enter: detail  r: refresh  esc: back"
+	case screenHistoryDetail:
+		return "up/down: scroll  esc: back"
 	case screenConfirm:
 		return "y: confirm  n/esc: cancel"
 	}
@@ -306,6 +325,8 @@ func (model *Model) resizeComponents() {
 	model.layoutShell()
 	model.jobDetail.viewport.Width = model.width
 	model.jobDetail.viewport.Height = max(model.contentHeight()-6, 3)
+	model.history.viewport.Width = model.width
+	model.history.viewport.Height = max(model.contentHeight()-8, 3)
 }
 
 // setStatus records an error message for the footer, or clears it when err is nil.

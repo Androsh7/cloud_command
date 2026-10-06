@@ -23,6 +23,7 @@ The first run writes `~/.cloud_command/settings.toml` with defaults and opens th
 
 ```
 settings.toml                   user defaults (see below)
+history.toml                    every command and job ever sent, from the TUI, the CLI and the MCP server
 cloud_command.log               JSON log
 agents/<name>/agent.toml        agent record: ids, public ip, key file names, jobs
 agents/<name>/private_rsa.key   private key (0600)
@@ -49,7 +50,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 
 | Screen | Keys |
 | --- | --- |
-| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` shell on selection, `t` terminate selection, `r` refresh, `q` quit |
+| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` shell on selection, `t` terminate selection, `h` history, `r` refresh, `q` quit |
 | Create form | `tab` / `shift+tab` move between fields, `enter` create, `esc` back |
 | Creating | `esc` cancel, `enter` back when finished |
 | Detail | `c` shell, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
@@ -57,6 +58,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 | Job editor | `ctrl+r` start job, `ctrl+s` toggle sudo, `esc` back |
 | Jobs | `enter` detail, `s` stop, `d` stop and remove, `r` refresh, `esc` back |
 | Job detail | `o` switch stdout/stderr, `s` stop, `r` refresh, `esc` back |
+| History | `enter` full entry, `r` refresh, `esc` back |
 
 `ctrl+c` quits from any screen.
 
@@ -67,6 +69,10 @@ The agents screen also lists instances tagged `Type=cloud_command` that have no 
 `c` opens a persistent `/bin/bash` on each selected agent under a pseudo-terminal. Working directory, variables and exports survive between commands, and the shell stays open when you leave the screen. Stdout and stderr stream into the view as they arrive; when several hosts are open each line is prefixed with `[host]`. Every line you type is sent to every host shown; press `tab` to focus one host and the input, interrupt and view apply to that host alone. Stderr lines are shown in red and `ctrl+o` filters the view to stdout or stderr only. Each finished command adds an `[exit N]` line to the transcript (bash reports it through its prompt hook, so programs that read the terminal cannot swallow it), and the per-host status shows `running` or `idle (exit N)`. `ctrl+x` sends Ctrl-C to the foreground command on every host. If a shell exits (for example after `exit`), the next line you send reopens it.
 
 `ctrl+s` saves the transcripts under `~/.cloud_command/output/`: one host is saved as `<timestamp>-<agent>.txt`, several as a `<timestamp>/` directory with one `<agent>.txt` per host.
+
+## History
+
+Every shell line, `run_command` call and job start is recorded in `~/.cloud_command/history.toml` with its time, agent, source (`tui`, `cli` or `mcp`), sudo flag, full script, job id and exit code once known. The record outlives the agent. Press `h` on the agent list to browse it newest first and `enter` to read the full script of an entry. The job detail screen also shows a job's full script.
 
 ## Persistent jobs
 
@@ -111,9 +117,9 @@ cloud_command jobs remove <agent> <job-id>
 | --- | --- |
 | `list_agents` | Agents with instance state, public IP and job count; `include_detached` also scans every region |
 | `get_agent` | One agent with its ssh command and the state of each job |
-| `create_agents` | One agent or a numbered batch; `wait: false` returns after launch |
-| `terminate_agents` | Terminate agents, delete their key pairs and records |
-| `run_command` | Run a bash script on several agents and return exit code, stdout and stderr per agent |
+| `create_agent` | One agent; `wait: false` returns after launch |
+| `terminate_agent` | Terminate one agent, delete its key pair and record |
+| `run_command` | Run a bash script on one agent and return exit code, stdout and stderr |
 | `start_job` | Start a persistent systemd job and return its id |
 | `job_status` | State, exit code and trailing output of a job |
 | `stop_job` | Stop a job, keeping its record |

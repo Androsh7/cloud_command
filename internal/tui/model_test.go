@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/androsh7/cloud_command/internal/config"
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 )
 
@@ -489,5 +491,65 @@ func TestTitleShowsVersion(t *testing.T) {
 
 	if !strings.Contains(view, "Cloud Command DEVELOPMENT") {
 		t.Fatalf("title lacks version:\n%s", view)
+	}
+}
+
+func TestHistoryScreenListsRecordedEntries(t *testing.T) {
+	model := testModel(t)
+	model.deps.History = history.NewStore(filepath.Join(t.TempDir(), history.FileName))
+	_, _ = model.deps.History.Record(history.Entry{Agent: "alpha", Kind: history.KindCommand, Source: history.SourceCli, Script: "uname -a"})
+	opened, _ := model.openHistory()
+	loaded, _ := opened.Update(opened.(Model).loadHistory()())
+
+	view := loaded.View()
+
+	if loaded.(Model).screen != screenHistory || !strings.Contains(view, "uname -a") || !strings.Contains(view, "alpha") {
+		t.Fatalf("history not shown:\n%s", view)
+	}
+}
+
+func TestHistoryDetailShowsFullScript(t *testing.T) {
+	model := testModel(t)
+	model.deps.History = history.NewStore(filepath.Join(t.TempDir(), history.FileName))
+	_, _ = model.deps.History.Record(history.Entry{Agent: "alpha", Kind: history.KindJob, Source: history.SourceMcp, Script: "line one\nline two is long", JobId: "job-1"})
+	opened, _ := model.openHistory()
+	loaded, _ := opened.Update(opened.(Model).loadHistory()())
+
+	detail := pressKey(loaded, "enter")
+
+	view := detail.View()
+	if detail.(Model).screen != screenHistoryDetail || !strings.Contains(view, "line two is long") || !strings.Contains(view, "job-1") {
+		t.Fatalf("detail missing full script:\n%s", view)
+	}
+}
+
+func TestShellLineIsRecordedWithExitCode(t *testing.T) {
+	model := testModel(t)
+	model.deps.History = history.NewStore(filepath.Join(t.TempDir(), history.FileName))
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	host := opened.(Model).shells["alpha"]
+	host.pending = 1
+	host.pendingIds = []string{model.recordHistory(history.Entry{Agent: "alpha", Kind: history.KindCommand, Source: history.SourceTui, Script: "false"})}
+
+	finished, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Finished: true, ExitCode: 1}})
+
+	entries, _ := finished.(Model).deps.History.List()
+	if len(entries) != 1 || entries[0].ExitCode == nil || *entries[0].ExitCode != 1 {
+		t.Fatalf("exit code not recorded: %+v", entries)
+	}
+}
+
+func TestJobDetailShowsFullScript(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	model.detail.agent = target
+	model.jobDetail.job = agent.Job{Id: "job-1", Script: "first line\nsecond line of the script"}
+	model.screen = screenJobDetail
+
+	view := model.View()
+
+	if !strings.Contains(view, "second line of the script") {
+		t.Fatalf("job detail truncates the script:\n%s", view)
 	}
 }

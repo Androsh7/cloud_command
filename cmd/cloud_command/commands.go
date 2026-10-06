@@ -13,6 +13,7 @@ import (
 
 	"github.com/androsh7/cloud_command/internal/control"
 	"github.com/androsh7/cloud_command/internal/mcpserver"
+	"github.com/androsh7/cloud_command/pkg/history"
 )
 
 const (
@@ -40,7 +41,8 @@ func newMcpCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			return withApplication(command.Context(), func(ctx context.Context, app *application) error {
-				return mcpserver.ServeStdio(ctx, mcpserver.New(app.controller))
+				controller := control.New(app.store, app.settings, app.history, history.SourceMcp)
+				return mcpserver.ServeStdio(ctx, mcpserver.New(controller))
 			})
 		},
 	}

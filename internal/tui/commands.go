@@ -13,6 +13,7 @@ import (
 
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 )
 
@@ -108,9 +109,18 @@ func (model Model) startCreation(ctx context.Context, spec agent.Spec, count int
 }
 
 // startJobOn starts a persistent job on one agent.
-func startJobOn(ctx context.Context, target *agent.Agent, command sshx.Command) tea.Cmd {
+func startJobOn(ctx context.Context, target *agent.Agent, command sshx.Command, historyStore *history.Store) tea.Cmd {
 	return func() tea.Msg {
 		job, err := target.StartJob(ctx, command)
+		entry := history.Entry{Agent: target.Name(), Kind: history.KindJob, Source: history.SourceTui, Script: command.Script, Sudo: command.Sudo, JobId: job.Id}
+		if err != nil {
+			entry.Error = err.Error()
+		}
+		if historyStore != nil {
+			if _, recordErr := historyStore.Record(entry); recordErr != nil {
+				slog.Warn("recording history failed", "error", recordErr)
+			}
+		}
 		return jobStartedMsg{agentName: target.Name(), job: job, err: err}
 	}
 }

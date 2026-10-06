@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 	"github.com/androsh7/cloud_command/pkg/systemd"
 )
@@ -80,6 +81,12 @@ type jobPollMsg struct {
 // jobActionMsg reports the result of stopping or removing a job.
 type jobActionMsg struct {
 	err error
+}
+
+// historyLoadedMsg carries the recorded commands and jobs, newest first.
+type historyLoadedMsg struct {
+	entries []history.Entry
+	err     error
 }
 
 // terminateFinishedMsg reports the result of destroying an agent or detached instance.

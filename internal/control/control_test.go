@@ -14,7 +14,7 @@ import (
 
 func testController(t *testing.T) *Controller {
 	t.Helper()
-	return New(agent.NewStore(t.TempDir()), config.DefaultSettings())
+	return New(agent.NewStore(t.TempDir()), config.DefaultSettings(), nil, "test")
 }
 
 func TestResolveSpecAppliesSettingsDefaults(t *testing.T) {
