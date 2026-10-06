@@ -173,11 +173,8 @@ func (model Model) viewJobs() string {
 	var builder strings.Builder
 	builder.WriteString(headerStyle.Render("Jobs on " + target.Name()))
 	builder.WriteString("\n")
-	switch {
-	case model.jobs.busy:
+	if model.jobs.busy {
 		builder.WriteString(model.spinner.View() + " Working...\n")
-	case model.jobs.loading:
-		builder.WriteString(model.spinner.View() + " Loading job status...\n")
 	}
 	if len(target.Record.Jobs) == 0 {
 		builder.WriteString(dimStyle.Render("  No jobs. Press esc then J to start one."))
@@ -298,9 +295,6 @@ func (model Model) viewJobDetail() string {
 	builder.WriteString(headerStyle.Render(fmt.Sprintf("Job %s on %s", shortId(state.job.Id), model.detail.agent.Name())))
 	builder.WriteString("\n")
 	statusText := state.status.Summary()
-	if state.loading {
-		statusText = model.spinner.View() + " " + statusText
-	}
 	builder.WriteString(labelStyle.Render("  Status   ") + statusText + "\n")
 	builder.WriteString(labelStyle.Render("  Started  ") + state.job.StartedAt.Local().Format(timestampLayout) + "\n")
 	builder.WriteString(labelStyle.Render("  Script   ") + previewScript(state.job.Script) + "\n")

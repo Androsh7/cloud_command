@@ -239,11 +239,8 @@ func (model Model) viewAgents() string {
 	var builder strings.Builder
 	builder.WriteString(headerStyle.Render("Agents"))
 	builder.WriteString("\n")
-	switch {
-	case state.busy != "":
+	if state.busy != "" {
 		builder.WriteString(model.spinner.View() + " " + state.busy + "...\n")
-	case state.refreshing:
-		builder.WriteString(model.spinner.View() + " Refreshing agents...\n")
 	}
 
 	if len(state.agents) == 0 && !state.refreshing {
@@ -251,7 +248,7 @@ func (model Model) viewAgents() string {
 		builder.WriteString("\n")
 	}
 	if len(state.agents) > 0 {
-		builder.WriteString(dimStyle.Render(fmt.Sprintf("      %-20s %-12s %-14s %-12s %-16s %-20s %s", "NAME", "STATE", "REGION", "TYPE", "PUBLIC IP", "INSTANCE", "JOBS")))
+		builder.WriteString(dimStyle.Render(fmt.Sprintf("      %-20s %-12s %-14s %-12s %-16s %-20s %-5s %s", "NAME", "STATE", "REGION", "TYPE", "PUBLIC IP", "INSTANCE", "JOBS", "SHELL")))
 		builder.WriteString("\n")
 	}
 	for index, storedAgent := range state.agents {
@@ -265,20 +262,18 @@ func (model Model) viewAgents() string {
 		if state.selected[storedAgent.Name()] {
 			mark = "[x]"
 		}
-		line := fmt.Sprintf("%s %-20s %-12s %-14s %-12s %-16s %-20s %d",
+		line := fmt.Sprintf("%s %-20s %-12s %-14s %-12s %-16s %-20s %-5d %s",
 			mark, storedAgent.Name(), info.State, storedAgent.Record.Region, storedAgent.Record.InstanceType,
-			storedAgent.Record.PublicIp, storedAgent.Record.InstanceId, len(storedAgent.Record.Jobs))
+			storedAgent.Record.PublicIp, storedAgent.Record.InstanceId, len(storedAgent.Record.Jobs),
+			model.shellIndicator(storedAgent.Name()))
 		builder.WriteString(model.renderRow(line, index == state.cursor))
 	}
 
 	unmanaged := state.visibleDetached()
-	if state.scanning || len(unmanaged) > 0 {
+	if len(unmanaged) > 0 {
 		builder.WriteString("\n")
 		builder.WriteString(headerStyle.Render("Detached instances (tagged, no local record)"))
 		builder.WriteString("\n")
-	}
-	if state.scanning {
-		builder.WriteString(model.spinner.View() + " Scanning every region...\n")
 	}
 	if len(unmanaged) > 0 {
 		builder.WriteString(dimStyle.Render(fmt.Sprintf("      %-22s %-14s %-16s %s", "INSTANCE", "STATE", "REGION", "KEY PAIR")))

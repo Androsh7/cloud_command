@@ -56,6 +56,26 @@ func (host *hostShell) status() string {
 	}
 }
 
+// shellIndicator returns the short connection state shown on the agent list, or an empty string when there is no shell.
+func (model Model) shellIndicator(name string) string {
+	host, found := model.shells[name]
+	if !found {
+		return ""
+	}
+	switch {
+	case host.err != nil:
+		return errorStyle.Render("error")
+	case host.opening:
+		return "connecting"
+	case host.shell == nil || host.shell.IsClosed():
+		return dimStyle.Render("closed")
+	case host.pending > 0:
+		return "running"
+	default:
+		return successStyle.Render("open")
+	}
+}
+
 // record appends a line to the host's own transcript, keeping it bounded.
 func (host *hostShell) record(line string) {
 	host.transcript = append(host.transcript, line)
@@ -214,6 +234,13 @@ func (model Model) isShellTarget(name string) bool {
 func (model Model) updateShellKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch message.String() {
 	case "esc":
+		model.notice = ""
+		model.screen = model.shell.returnTo
+		return model, nil
+	case "ctrl+q":
+		for _, target := range model.shell.targets {
+			model.closeShell(target.Name())
+		}
 		model.notice = ""
 		model.screen = model.shell.returnTo
 		return model, nil

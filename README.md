@@ -50,7 +50,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 | Create form | `tab` / `shift+tab` move between fields, `enter` create, `esc` back |
 | Creating | `esc` cancel, `enter` back when finished |
 | Detail | `c` shell, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
-| Shell | `enter` send the line to every host, `up`/`down` history, `pgup`/`pgdn` scroll, `ctrl+x` interrupt (Ctrl-C), `ctrl+l` clear, `ctrl+s` save transcripts, `esc` back (shells stay open) |
+| Shell | `enter` send the line to every host, `up`/`down` history, `pgup`/`pgdn` scroll, `ctrl+x` interrupt (Ctrl-C), `ctrl+l` clear, `ctrl+s` save transcripts, `esc` back (shells stay open), `ctrl+q` close the shells and go back |
 | Job editor | `ctrl+r` start job, `ctrl+s` toggle sudo, `esc` back |
 | Jobs | `enter` detail, `s` stop, `d` stop and remove, `r` refresh, `esc` back |
 | Job detail | `o` switch stdout/stderr, `s` stop, `r` refresh, `esc` back |

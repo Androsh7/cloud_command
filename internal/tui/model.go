@@ -186,6 +186,9 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 func (model Model) View() string {
 	var builder strings.Builder
 	builder.WriteString(titleStyle.Render("Cloud Command"))
+	if model.isRefreshing() {
+		builder.WriteString(" " + model.spinner.View())
+	}
 	builder.WriteString("\n\n")
 	switch model.screen {
 	case screenAgents:
@@ -242,7 +245,7 @@ func (model Model) helpLine() string {
 	case screenCommandRunning:
 		return "ctrl+x: cancel"
 	case screenShell:
-		return "enter: send  up/down: history  pgup/pgdn: scroll  ctrl+x: interrupt  ctrl+l: clear  ctrl+s: save  esc: back (shell stays open)"
+		return "enter: send  up/down: history  pgup/pgdn: scroll  ctrl+x: interrupt  ctrl+l: clear  ctrl+s: save  esc: back (shells stay open)  ctrl+q: close shells and back"
 	case screenJobs:
 		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
 	case screenJobDetail:
@@ -251,6 +254,11 @@ func (model Model) helpLine() string {
 		return "y: confirm  n/esc: cancel"
 	}
 	return ""
+}
+
+// isRefreshing reports whether any background refresh is in flight, which the title line shows as a spinner.
+func (model Model) isRefreshing() bool {
+	return model.agents.refreshing || model.agents.scanning || model.jobs.loading || model.jobDetail.loading
 }
 
 // contentHeight returns the rows available to a scrolling component.

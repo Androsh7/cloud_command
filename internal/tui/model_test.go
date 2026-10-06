@@ -301,3 +301,38 @@ func TestTerminateWithSelectionPromptsForAllSelected(t *testing.T) {
 		t.Fatalf("unexpected confirm prompt %q on screen %d", prompt, confirming.(Model).screen)
 	}
 }
+
+func TestControlQClosesShellsAndLeaves(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+
+	left, _ := opened.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+
+	if left.(Model).screen != screenAgents || left.(Model).shells["alpha"] != nil {
+		t.Fatalf("expected shells closed and agents screen, got screen %d shells %v", left.(Model).screen, left.(Model).shells)
+	}
+}
+
+func TestAgentListShowsShellIndicatorAfterLeaving(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", InstanceId: "i-1", PublicIp: "203.0.113.5"}}
+	loaded, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{target}, infos: map[string]ec2.InstanceInfo{}})
+	opened, _ := loaded.(Model).openShell([]*agent.Agent{target}, screenAgents)
+
+	left := pressKey(opened, "esc")
+
+	if !strings.Contains(left.View(), "connecting") {
+		t.Fatalf("agent list lacks shell indicator:\n%s", left.View())
+	}
+}
+
+func TestRefreshShowsSpinnerInTitleOnly(t *testing.T) {
+	model := testModel(t)
+
+	view := model.View()
+
+	if strings.Contains(view, "Refreshing") || strings.Contains(view, "Scanning") {
+		t.Fatalf("refresh text should be gone:\n%s", view)
+	}
+}

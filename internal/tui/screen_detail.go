@@ -98,8 +98,5 @@ func (model Model) viewDetail() string {
 		builder.WriteString(row[1])
 		builder.WriteString("\n")
 	}
-	if model.agents.refreshing {
-		builder.WriteString("\n" + model.spinner.View() + " Refreshing...\n")
-	}
 	return builder.String()
 }
