@@ -11,7 +11,7 @@ import (
 
 	"github.com/androsh7/cloud_command/internal/config"
 	"github.com/androsh7/cloud_command/internal/tui"
-	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/agent"
 )
 
 const logFilePermissions = 0o600
@@ -50,7 +50,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	if err := tui.Run(ctx, ec2.AgentTypeTagValue); err != nil {
+	deps := tui.Dependencies{
+		Settings: settings,
+		Store:    agent.NewStore(paths.AgentsDirectory),
+		Paths:    paths,
+	}
+	if err := tui.Run(ctx, deps); err != nil {
 		slog.Error("tui exited with error", "error", err)
 		return err
 	}

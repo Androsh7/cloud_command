@@ -1,4 +1,4 @@
-// Package tui defines the terminal user interface for browsing cloud command agents.
+// Package tui defines the terminal user interface for managing cloud command agents.
 package tui
 
 import (
@@ -8,161 +8,256 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
-	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/internal/config"
+	"github.com/androsh7/cloud_command/pkg/agent"
 )
 
-const unlimitedSearchThreads = 0
+// Dependencies holds everything the interface needs from the rest of the application.
+type Dependencies struct {
+	Settings config.Settings
+	Store    *agent.Store
+	Paths    config.Paths
+}
 
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	errorStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
+// screen identifies which view is active.
+type screen int
+
+const (
+	screenAgents screen = iota
+	screenCreate
+	screenCreating
+	screenDetail
+	screenCommand
+	screenCommandRunning
+	screenOutput
+	screenJobs
+	screenJobDetail
+	screenConfirm
 )
 
-// agentsLoadedMsg carries the agents found by a search.
-type agentsLoadedMsg struct {
-	agents []ec2.DetachedAgent
-}
+const (
+	defaultWidth  = 100
+	defaultHeight = 30
+	chromeHeight  = 6
+)
 
-// searchFailedMsg carries the error from a failed search.
-type searchFailedMsg struct {
-	err error
-}
-
-// Model holds the state of the agent browser.
+// Model holds the state of every screen.
 type Model struct {
 	ctx       context.Context
-	nameTag   string
+	deps      Dependencies
+	screen    screen
+	width     int
+	height    int
 	spinner   spinner.Model
-	agents    []ec2.DetachedAgent
-	cursor    int
-	searching bool
-	err       error
+	status    string
+	agents    agentsState
+	create    createState
+	creating  creatingState
+	detail    detailState
+	command   commandState
+	output    outputState
+	jobs      jobsState
+	jobDetail jobDetailState
+	confirm   confirmState
 }
 
-// New returns a model that searches for agents carrying the given Type tag.
-func New(ctx context.Context, nameTag string) Model {
+// New returns a model that starts on the agents screen.
+func New(ctx context.Context, deps Dependencies) Model {
 	loadingSpinner := spinner.New()
 	loadingSpinner.Spinner = spinner.Dot
 	loadingSpinner.Style = titleStyle
 	return Model{
-		ctx:       ctx,
-		nameTag:   nameTag,
-		spinner:   loadingSpinner,
-		searching: true,
+		ctx:     ctx,
+		deps:    deps,
+		screen:  screenAgents,
+		width:   defaultWidth,
+		height:  defaultHeight,
+		spinner: loadingSpinner,
+		agents:  newAgentsState(),
 	}
 }
 
-// Init starts the spinner and the first search.
+// Init starts the spinner and the first agent refresh.
 func (model Model) Init() tea.Cmd {
-	return tea.Batch(model.spinner.Tick, model.searchAgents())
+	model.agents.refreshing = true
+	return tea.Batch(model.spinner.Tick, model.refreshAgents(), model.scanDetached())
 }
 
 // Update applies one message to the model.
 func (model Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
-	case tea.KeyMsg:
-		return model.handleKey(message)
-	case agentsLoadedMsg:
-		model.agents = message.agents
-		model.err = nil
-		model.searching = false
-		if model.cursor >= len(model.agents) {
-			model.cursor = max(len(model.agents)-1, 0)
-		}
-		return model, nil
-	case searchFailedMsg:
-		model.err = message.err
-		model.searching = false
+	case tea.WindowSizeMsg:
+		model.width = message.Width
+		model.height = message.Height
+		model.resizeComponents()
 		return model, nil
 	case spinner.TickMsg:
 		var command tea.Cmd
 		model.spinner, command = model.spinner.Update(message)
 		return model, command
+	case tea.KeyMsg:
+		if message.String() == "ctrl+c" {
+			return model, tea.Quit
+		}
+		return model.handleKey(message)
+	}
+	return model.handleData(message)
+}
+
+// handleKey routes a key press to the active screen.
+func (model Model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch model.screen {
+	case screenAgents:
+		return model.updateAgentsKey(message)
+	case screenCreate:
+		return model.updateCreateKey(message)
+	case screenCreating:
+		return model.updateCreatingKey(message)
+	case screenDetail:
+		return model.updateDetailKey(message)
+	case screenCommand:
+		return model.updateCommandKey(message)
+	case screenCommandRunning:
+		return model, nil
+	case screenOutput:
+		return model.updateOutputKey(message)
+	case screenJobs:
+		return model.updateJobsKey(message)
+	case screenJobDetail:
+		return model.updateJobDetailKey(message)
+	case screenConfirm:
+		return model.updateConfirmKey(message)
 	}
 	return model, nil
 }
 
-// View renders the agent list.
+// handleData applies a background result regardless of the active screen.
+func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
+	switch message := message.(type) {
+	case agentsLoadedMsg:
+		return model.applyAgentsLoaded(message)
+	case detachedLoadedMsg:
+		return model.applyDetachedLoaded(message)
+	case createProgressMsg:
+		return model.applyCreateProgress(message)
+	case createFinishedMsg:
+		return model.applyCreateFinished(message)
+	case commandFinishedMsg:
+		return model.applyCommandFinished(message)
+	case jobStartedMsg:
+		return model.applyJobStarted(message)
+	case jobStatusesMsg:
+		return model.applyJobStatuses(message)
+	case jobDetailMsg:
+		return model.applyJobDetail(message)
+	case jobPollMsg:
+		return model.applyJobPoll(message)
+	case jobActionMsg:
+		return model.applyJobAction(message)
+	case terminateFinishedMsg:
+		return model.applyTerminateFinished(message)
+	case errorMsg:
+		model.status = message.err.Error()
+		return model, nil
+	}
+	return model, nil
+}
+
+// View renders the active screen with a shared title and footer.
 func (model Model) View() string {
 	var builder strings.Builder
-	builder.WriteString(titleStyle.Render("Cloud Command Agents"))
+	builder.WriteString(titleStyle.Render("Cloud Command"))
 	builder.WriteString("\n\n")
-
-	switch {
-	case model.searching:
-		builder.WriteString(model.spinner.View())
-		builder.WriteString(" Searching every region for agents tagged ")
-		builder.WriteString(model.nameTag)
-		builder.WriteString("...\n")
-	case model.err != nil:
-		builder.WriteString(errorStyle.Render("Search failed: " + model.err.Error()))
-		builder.WriteString("\n")
-	case len(model.agents) == 0:
-		builder.WriteString(dimStyle.Render("No agents found."))
-		builder.WriteString("\n")
-	default:
-		for index, agent := range model.agents {
-			line := fmt.Sprintf("%-22s %-16s %s", agent.Id, agent.Region, agent.KeyPair)
-			if index == model.cursor {
-				builder.WriteString(selectedStyle.Render("> " + line))
-			} else {
-				builder.WriteString("  ")
-				builder.WriteString(line)
-			}
-			builder.WriteString("\n")
-		}
+	switch model.screen {
+	case screenAgents:
+		builder.WriteString(model.viewAgents())
+	case screenCreate:
+		builder.WriteString(model.viewCreate())
+	case screenCreating:
+		builder.WriteString(model.viewCreating())
+	case screenDetail:
+		builder.WriteString(model.viewDetail())
+	case screenCommand:
+		builder.WriteString(model.viewCommand())
+	case screenCommandRunning:
+		builder.WriteString(model.viewCommandRunning())
+	case screenOutput:
+		builder.WriteString(model.viewOutput())
+	case screenJobs:
+		builder.WriteString(model.viewJobs())
+	case screenJobDetail:
+		builder.WriteString(model.viewJobDetail())
+	case screenConfirm:
+		builder.WriteString(model.viewConfirm())
 	}
-
 	builder.WriteString("\n")
-	builder.WriteString(dimStyle.Render("up/down: move  r: refresh  q: quit"))
+	if model.status != "" {
+		builder.WriteString(errorStyle.Render(model.status))
+		builder.WriteString("\n")
+	}
+	builder.WriteString(dimStyle.Render(model.helpLine()))
 	builder.WriteString("\n")
 	return builder.String()
 }
 
-// handleKey applies one key press to the model.
-func (model Model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch message.String() {
-	case "q", "ctrl+c", "esc":
-		return model, tea.Quit
-	case "r":
-		if model.searching {
-			return model, nil
+// helpLine returns the key hints for the active screen.
+func (model Model) helpLine() string {
+	switch model.screen {
+	case screenAgents:
+		return "enter: detail  n: new  b: batch  space: select  a: all  c: command  t: terminate  r: refresh  q: quit"
+	case screenCreate:
+		return "tab/shift+tab: field  enter: create  esc: back"
+	case screenCreating:
+		if model.creating.finished {
+			return "enter/esc: back to agents"
 		}
-		model.searching = true
-		model.err = nil
-		return model, tea.Batch(model.spinner.Tick, model.searchAgents())
-	case "up", "k":
-		if model.cursor > 0 {
-			model.cursor--
-		}
-	case "down", "j":
-		if model.cursor < len(model.agents)-1 {
-			model.cursor++
-		}
+		return "esc: cancel"
+	case screenDetail:
+		return "c: command  J: start job  j: jobs  t: terminate  r: refresh  esc: back"
+	case screenCommand:
+		return "ctrl+r: run  ctrl+s: toggle sudo  esc: back"
+	case screenCommandRunning:
+		return "running..."
+	case screenOutput:
+		return "up/down/pgup/pgdn: scroll  esc: back"
+	case screenJobs:
+		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
+	case screenJobDetail:
+		return "o: toggle stdout/stderr  s: stop  r: refresh  esc: back"
+	case screenConfirm:
+		return "y: confirm  n/esc: cancel"
 	}
-	return model, nil
+	return ""
 }
 
-// searchAgents returns a command that searches every region for agents.
-func (model Model) searchAgents() tea.Cmd {
-	ctx := model.ctx
-	nameTag := model.nameTag
-	return func() tea.Msg {
-		agents, err := ec2.ListAllEc2s(ctx, nameTag, unlimitedSearchThreads)
-		if err != nil {
-			return searchFailedMsg{err: err}
-		}
-		return agentsLoadedMsg{agents: agents}
-	}
+// contentHeight returns the rows available to a scrolling component.
+func (model Model) contentHeight() int {
+	return max(model.height-chromeHeight, 5)
 }
 
-// Run starts the TUI and blocks until the user quits.
-func Run(ctx context.Context, nameTag string) error {
-	program := tea.NewProgram(New(ctx, nameTag), tea.WithAltScreen())
+// resizeComponents adjusts every sized component to the terminal.
+func (model *Model) resizeComponents() {
+	model.command.textarea.SetWidth(max(model.width-4, 20))
+	model.command.textarea.SetHeight(max(model.contentHeight()-6, 3))
+	model.output.viewport.Width = model.width
+	model.output.viewport.Height = model.contentHeight() - 2
+	model.jobDetail.viewport.Width = model.width
+	model.jobDetail.viewport.Height = max(model.contentHeight()-6, 3)
+}
+
+// setStatus records an error message for the footer, or clears it when err is nil.
+func (model *Model) setStatus(err error) {
+	if err == nil {
+		model.status = ""
+		return
+	}
+	model.status = err.Error()
+}
+
+// Run starts the interface and blocks until the user quits.
+func Run(ctx context.Context, deps Dependencies) error {
+	program := tea.NewProgram(New(ctx, deps), tea.WithAltScreen(), tea.WithContext(ctx))
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("running tui: %w", err)
 	}
