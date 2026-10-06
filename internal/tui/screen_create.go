@@ -41,13 +41,55 @@ type creatingState struct {
 	order    []string
 	steps    map[string]agent.Step
 	errors   map[string]error
+	active   bool
 	finished bool
 	cancel   context.CancelFunc
 	channel  <-chan tea.Msg
 }
 
+// launched reports whether an agent has passed the launch step, failed, or finished.
+func (state creatingState) launched(name string) bool {
+	if state.errors[name] != nil {
+		return true
+	}
+	switch state.steps[name] {
+	case agent.StepWaitRunning, agent.StepWaitSsh, agent.StepDone:
+		return true
+	}
+	return false
+}
+
+// allLaunched reports whether every agent in the run has launched, failed or finished.
+func (state creatingState) allLaunched() bool {
+	for _, name := range state.order {
+		if !state.launched(name) {
+			return false
+		}
+	}
+	return true
+}
+
+// buildingState returns the state label for an agent that is still being created, or false when it is not.
+func (state creatingState) buildingState(name string) (string, bool) {
+	if !state.active || state.errors[name] != nil {
+		return "", false
+	}
+	step, found := state.steps[name]
+	if !found || step == agent.StepDone {
+		return "", false
+	}
+	if state.launched(name) {
+		return "starting", true
+	}
+	return "building", true
+}
+
 // openCreate switches to the create form, prefilled from the settings.
 func (model Model) openCreate(batch bool) Model {
+	if model.creating.active {
+		model.setStatus(fmt.Errorf("a creation is already in progress"))
+		return model
+	}
 	settings := model.deps.Settings
 	defaults := [fieldTotal]string{"", settings.Region, settings.InstanceType, string(settings.Architecture), "2"}
 	for index := range model.create.inputs {
@@ -141,6 +183,7 @@ func (model Model) submitCreate() (tea.Model, tea.Cmd) {
 		order:   names,
 		steps:   map[string]agent.Step{},
 		errors:  map[string]error{},
+		active:  true,
 		cancel:  cancel,
 		channel: channel,
 	}
@@ -160,9 +203,7 @@ func (model Model) updateCreatingKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		model.status = "cancelling..."
 		return model, nil
 	case "enter":
-		if model.creating.finished {
-			return model.leaveCreating()
-		}
+		return model.leaveCreating()
 	}
 	return model, nil
 }
@@ -175,25 +216,41 @@ func (model Model) leaveCreating() (tea.Model, tea.Cmd) {
 	return model, tea.Batch(model.spinner.Tick, model.refreshAgents())
 }
 
-// applyCreateProgress records one step and waits for the next message.
+// applyCreateProgress records one step, returns to the agents screen once every instance has launched, and waits for the next message.
 func (model Model) applyCreateProgress(message createProgressMsg) (tea.Model, tea.Cmd) {
 	model.creating.steps[message.name] = message.step
-	return model, waitFor(model.creating.channel)
+	commands := []tea.Cmd{waitFor(model.creating.channel)}
+	if message.step == agent.StepWaitRunning {
+		model.agents.refreshing = true
+		commands = append(commands, model.spinner.Tick, model.refreshAgents())
+	}
+	if model.screen == screenCreating && model.creating.allLaunched() {
+		model.screen = screenAgents
+		model.setStatus(nil)
+	}
+	return model, tea.Batch(commands...)
 }
 
 // applyCreateFinished records the outcome of every agent.
 func (model Model) applyCreateFinished(message createFinishedMsg) (tea.Model, tea.Cmd) {
 	model.creating.finished = true
+	model.creating.active = false
 	model.creating.cancel()
 	model.status = ""
+	failures := []string{}
 	for _, result := range message.results {
 		if result.Err != nil {
 			model.creating.errors[result.Name] = result.Err
+			failures = append(failures, result.Name+": "+result.Err.Error())
 		} else {
 			model.creating.steps[result.Name] = agent.StepDone
 		}
 	}
-	return model, nil
+	if len(failures) > 0 && model.screen != screenCreating {
+		model.status = "creation failed for " + strings.Join(failures, "; ")
+	}
+	model.agents.refreshing = true
+	return model, tea.Batch(model.spinner.Tick, model.refreshAgents())
 }
 
 // viewCreate renders the create form.

@@ -165,3 +165,36 @@ func TestConfirmYesRunsAction(t *testing.T) {
 		t.Fatal("expected the action to run")
 	}
 }
+
+func TestCreatingReturnsToAgentsOnceEveryInstanceLaunched(t *testing.T) {
+	model := testModel(t)
+	model.screen = screenCreating
+	model.creating = creatingState{
+		order:  []string{"web-1", "web-2"},
+		steps:  map[string]agent.Step{},
+		errors: map[string]error{},
+		active: true,
+		cancel: func() {},
+	}
+
+	updated, _ := model.Update(createProgressMsg{name: "web-1", step: agent.StepWaitRunning})
+	stillCreating := updated.(Model).screen
+	updated, _ = updated.Update(createProgressMsg{name: "web-2", step: agent.StepWaitSsh})
+
+	if stillCreating != screenCreating || updated.(Model).screen != screenAgents {
+		t.Fatalf("got screens %d then %d, want creating then agents", stillCreating, updated.(Model).screen)
+	}
+	if label, building := updated.(Model).creating.buildingState("web-1"); !building || label != "starting" {
+		t.Fatalf("got %q %v, want starting", label, building)
+	}
+}
+
+func TestBuildingStateBeforeLaunchIsBuilding(t *testing.T) {
+	state := creatingState{active: true, steps: map[string]agent.Step{"web-1": agent.StepImportKey}, errors: map[string]error{}}
+
+	label, building := state.buildingState("web-1")
+
+	if !building || label != "building" {
+		t.Fatalf("got %q %v", label, building)
+	}
+}

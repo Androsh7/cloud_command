@@ -248,6 +248,11 @@ func (model Model) viewAgents() string {
 	}
 	for index, storedAgent := range state.agents {
 		info := state.infos[storedAgent.Name()]
+		if buildingState, building := model.creating.buildingState(storedAgent.Name()); building {
+			info.State = buildingState
+		} else if storedAgent.Record.InstanceId == "" {
+			info.State = "incomplete"
+		}
 		mark := "[ ]"
 		if state.selected[storedAgent.Name()] {
 			mark = "[x]"

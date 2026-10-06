@@ -219,7 +219,7 @@ func (model Model) helpLine() string {
 		if model.creating.finished {
 			return "enter/esc: back to agents"
 		}
-		return "esc: cancel"
+		return "esc: cancel  enter: back to agents (creation continues)"
 	case screenDetail:
 		return "c: command  J: start job  j: jobs  t: terminate  r: refresh  esc: back"
 	case screenCommand:
