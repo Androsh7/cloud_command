@@ -1,0 +1,34 @@
+name: cloud-command
+
+services:
+  cloud-command-sshd:
+    container_name: cloud-command-sshd
+    image: lscr.io/linuxserver/openssh-server:10.3_p1-r1-ls237
+    # no user: the linuxserver image drops to PUID/PGID itself through s6
+    # no no-new-privileges: the live ssh tests exercise sudo inside the container
+    restart: unless-stopped
+    environment:
+      USER_NAME: deploy
+      PUBLIC_KEY_FILE: /keys/deploy.pub
+      SUDO_ACCESS: "true"
+    ports:
+      - "127.0.0.1:2222:2222"
+    volumes:
+      - type: bind
+        source: ~/.ssh/sshd_container.pub
+        target: /keys/deploy.pub
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 2222"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cloud-command-internal
+
+networks:
+  cloud-command-internal:
+    name: cloud-command-internal
