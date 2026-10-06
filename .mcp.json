@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cloud-command": {
+      "type": "stdio",
+      "command": "cloud_command",
+      "args": ["mcp"]
+    }
+  }
+}
