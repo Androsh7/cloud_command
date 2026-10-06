@@ -50,7 +50,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 | Create form | `tab` / `shift+tab` move between fields, `enter` create, `esc` back |
 | Creating | `esc` cancel, `enter` back when finished |
 | Detail | `c` shell, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
-| Shell | `enter` send the line to every host, `up`/`down` history, `pgup`/`pgdn` scroll, `ctrl+x` interrupt (Ctrl-C), `ctrl+l` clear, `ctrl+s` save transcripts, `esc` back (shells stay open), `ctrl+q` close the shells and go back |
+| Shell | `enter` send the line to every host, `up`/`down` history, `pgup`/`pgdn` scroll, `tab` switch between all hosts and one host at a time, `ctrl+o` cycle stdout+stderr / stdout / stderr, `ctrl+x` interrupt (Ctrl-C), `ctrl+l` clear, `ctrl+s` save transcripts, `esc` back (shells stay open), `ctrl+q` close the shells and go back |
 | Job editor | `ctrl+r` start job, `ctrl+s` toggle sudo, `esc` back |
 | Jobs | `enter` detail, `s` stop, `d` stop and remove, `r` refresh, `esc` back |
 | Job detail | `o` switch stdout/stderr, `s` stop, `r` refresh, `esc` back |
@@ -61,7 +61,7 @@ The agents screen also lists instances tagged `Type=cloud_command` that have no 
 
 ## Shells
 
-`c` opens a persistent `/bin/bash` on each selected agent under a pseudo-terminal. Working directory, variables and exports survive between commands, and the shell stays open when you leave the screen. Stdout and stderr stream into the view as they arrive; when several hosts are open each line is prefixed with `[host]`. Every line you type is sent to every host, and the per-host status shows `running` or `idle (exit N)`. `ctrl+x` sends Ctrl-C to the foreground command on every host. If a shell exits (for example after `exit`), the next line you send reopens it.
+`c` opens a persistent `/bin/bash` on each selected agent under a pseudo-terminal. Working directory, variables and exports survive between commands, and the shell stays open when you leave the screen. Stdout and stderr stream into the view as they arrive; when several hosts are open each line is prefixed with `[host]`. Every line you type is sent to every host shown; press `tab` to focus one host and the input, interrupt and view apply to that host alone. Stderr lines are shown in red and `ctrl+o` filters the view to stdout or stderr only. The per-host status shows `running` or `idle (exit N)`. `ctrl+x` sends Ctrl-C to the foreground command on every host. If a shell exits (for example after `exit`), the next line you send reopens it.
 
 `ctrl+s` saves the transcripts under `~/.cloud_command/output/`: one host is saved as `<timestamp>-<agent>.txt`, several as a `<timestamp>/` directory with one `<agent>.txt` per host.
 

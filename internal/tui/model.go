@@ -245,7 +245,7 @@ func (model Model) helpLine() string {
 	case screenCommandRunning:
 		return "ctrl+x: cancel"
 	case screenShell:
-		return "enter: send  up/down: history  pgup/pgdn: scroll  ctrl+x: interrupt  ctrl+l: clear  ctrl+s: save  esc: back (shells stay open)  ctrl+q: close shells and back"
+		return "enter: send  up/down: history  pgup/pgdn: scroll  ctrl+x: interrupt  tab: all/one host  ctrl+o: streams  ctrl+l: clear  ctrl+s: save  esc: back  ctrl+q: close shells and back"
 	case screenJobs:
 		return "enter: detail  s: stop  d: remove  r: refresh  esc: back"
 	case screenJobDetail:

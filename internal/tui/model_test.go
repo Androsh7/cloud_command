@@ -336,3 +336,42 @@ func TestRefreshShowsSpinnerInTitleOnly(t *testing.T) {
 		t.Fatalf("refresh text should be gone:\n%s", view)
 	}
 }
+
+func TestShellTabFocusesOneHost(t *testing.T) {
+	model := testModel(t)
+	targets := []*agent.Agent{
+		{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}},
+		{Record: agent.Record{Name: "bravo", PublicIp: "203.0.113.6"}},
+	}
+	opened, _ := model.openShell(targets, screenAgents)
+	updated, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "from-alpha"}})
+	updated, _ = updated.Update(shellEventMsg{agentName: "bravo", event: sshx.ShellEvent{Text: "from-bravo"}})
+
+	focused, _ := updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	view := focused.View()
+	if !strings.Contains(view, "from-alpha") || strings.Contains(view, "from-bravo") || !strings.Contains(view, "alpha only") {
+		t.Fatalf("focused view wrong:\n%s", view)
+	}
+	if len(focused.(Model).focusedTargets()) != 1 {
+		t.Fatal("input should target the focused host only")
+	}
+}
+
+func TestShellStreamFilterHidesStdout(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	updated, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "out-line", Stream: sshx.StreamStdout}})
+	updated, _ = updated.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "err-line", Stream: sshx.StreamStderr}})
+
+	stdoutOnly, _ := updated.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	stderrOnly, _ := stdoutOnly.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+
+	if strings.Contains(stdoutOnly.View(), "err-line") || !strings.Contains(stdoutOnly.View(), "out-line") {
+		t.Fatalf("stdout filter wrong:\n%s", stdoutOnly.View())
+	}
+	if strings.Contains(stderrOnly.View(), "out-line") || !strings.Contains(stderrOnly.View(), "err-line") {
+		t.Fatalf("stderr filter wrong:\n%s", stderrOnly.View())
+	}
+}

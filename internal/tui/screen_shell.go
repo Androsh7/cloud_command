@@ -23,7 +23,38 @@ const (
 	shellStatusOpening = "connecting"
 	shellStatusRunning = "running"
 	shellStatusClosed  = "closed"
+	focusAll           = -1
 )
+
+// streamFilter selects which output streams the shell view shows.
+type streamFilter int
+
+const (
+	streamFilterBoth streamFilter = iota
+	streamFilterStdout
+	streamFilterStderr
+	streamFilterCount
+)
+
+// label returns the filter name shown in the header.
+func (filter streamFilter) label() string {
+	switch filter {
+	case streamFilterStdout:
+		return "stdout"
+	case streamFilterStderr:
+		return "stderr"
+	default:
+		return "stdout+stderr"
+	}
+}
+
+// shellLine is one entry of the combined shell view.
+type shellLine struct {
+	agentName string
+	text      string
+	stream    sshx.Stream
+	isInput   bool
+}
 
 // hostShell is one agent's persistent remote shell and what the interface knows about it.
 type hostShell struct {
@@ -34,7 +65,7 @@ type hostShell struct {
 	lastExit   int
 	hasExit    bool
 	queue      []string
-	transcript []string
+	transcript []shellLine
 	err        error
 }
 
@@ -77,7 +108,7 @@ func (model Model) shellIndicator(name string) string {
 }
 
 // record appends a line to the host's own transcript, keeping it bounded.
-func (host *hostShell) record(line string) {
+func (host *hostShell) record(line shellLine) {
 	host.transcript = append(host.transcript, line)
 	if len(host.transcript) > maxShellLines {
 		host.transcript = host.transcript[len(host.transcript)-maxShellLines:]
@@ -89,7 +120,9 @@ type shellState struct {
 	targets      []*agent.Agent
 	input        textinput.Model
 	viewport     viewport.Model
-	lines        []string
+	lines        []shellLine
+	focus        int
+	filter       streamFilter
 	history      []string
 	historyIndex int
 	returnTo     screen
@@ -120,6 +153,8 @@ func (model Model) openShell(targets []*agent.Agent, returnTo screen) (tea.Model
 	model.shell.returnTo = returnTo
 	model.shell.input = newShellInput()
 	model.shell.lines = nil
+	model.shell.focus = focusAll
+	model.shell.filter = streamFilterBoth
 	model.shell.historyIndex = len(model.shell.history)
 	model.screen = screenShell
 	model.layoutShell()
@@ -128,13 +163,13 @@ func (model Model) openShell(targets []*agent.Agent, returnTo screen) (tea.Model
 	for _, target := range targets {
 		host := model.shellFor(target)
 		for _, line := range host.transcript {
-			model.appendShellLine(target.Name(), line)
+			model.appendShellLine(line)
 		}
 		if command := model.ensureShellOpen(host); command != nil {
 			commands = append(commands, command)
 		}
 	}
-	model.shell.viewport.GotoBottom()
+	model.refreshShellView(true)
 	return model, tea.Batch(commands...)
 }
 
@@ -196,28 +231,87 @@ func (model *Model) layoutShell() {
 	model.shell.input.Width = max(model.width-len(shellInputPrompt)-2, 20)
 }
 
-// prefixFor returns the host label prepended to lines when several hosts share the view.
-func (model Model) prefixFor(name string) string {
-	if len(model.shell.targets) <= 1 {
-		return ""
-	}
-	return dimStyle.Render("[" + name + "] ")
-}
-
 // appendShellLine adds one line to the combined view.
-func (model *Model) appendShellLine(name string, line string) {
-	model.shell.lines = append(model.shell.lines, model.prefixFor(name)+line)
+func (model *Model) appendShellLine(line shellLine) {
+	model.shell.lines = append(model.shell.lines, line)
 	if len(model.shell.lines) > maxShellLines {
 		model.shell.lines = model.shell.lines[len(model.shell.lines)-maxShellLines:]
 	}
 }
 
-// refreshShellView pushes the combined lines into the viewport, following the tail when it was at the bottom.
+// focusedTargets returns the hosts the view and the input currently apply to.
+func (model Model) focusedTargets() []*agent.Agent {
+	if model.shell.focus >= 0 && model.shell.focus < len(model.shell.targets) {
+		return []*agent.Agent{model.shell.targets[model.shell.focus]}
+	}
+	return model.shell.targets
+}
+
+// showsLine reports whether a line passes the current host focus and stream filter.
+func (model Model) showsLine(line shellLine) bool {
+	if model.shell.focus >= 0 && model.shell.focus < len(model.shell.targets) &&
+		line.agentName != model.shell.targets[model.shell.focus].Name() {
+		return false
+	}
+	if line.isInput {
+		return true
+	}
+	switch model.shell.filter {
+	case streamFilterStdout:
+		return line.stream == sshx.StreamStdout
+	case streamFilterStderr:
+		return line.stream == sshx.StreamStderr
+	default:
+		return true
+	}
+}
+
+// renderShellLine formats one line for the viewport, prefixing the host when several hosts are shown.
+func (model Model) renderShellLine(line shellLine) string {
+	prefix := ""
+	if model.shell.focus == focusAll && len(model.shell.targets) > 1 {
+		prefix = dimStyle.Render("[" + line.agentName + "] ")
+	}
+	switch {
+	case line.isInput:
+		return prefix + labelStyle.Render(line.text)
+	case line.stream == sshx.StreamStderr:
+		return prefix + errorStyle.Render(line.text)
+	default:
+		return prefix + line.text
+	}
+}
+
+// refreshShellView pushes the filtered lines into the viewport, following the tail when asked.
 func (model *Model) refreshShellView(follow bool) {
-	model.shell.viewport.SetContent(strings.Join(model.shell.lines, "\n"))
+	rendered := make([]string, 0, len(model.shell.lines))
+	for _, line := range model.shell.lines {
+		if model.showsLine(line) {
+			rendered = append(rendered, model.renderShellLine(line))
+		}
+	}
+	model.shell.viewport.SetContent(strings.Join(rendered, "\n"))
 	if follow {
 		model.shell.viewport.GotoBottom()
 	}
+}
+
+// cycleFocus moves the view from all hosts to each host in turn and back.
+func (model *Model) cycleFocus() {
+	if len(model.shell.targets) <= 1 {
+		return
+	}
+	model.shell.focus++
+	if model.shell.focus >= len(model.shell.targets) {
+		model.shell.focus = focusAll
+	}
+	model.refreshShellView(true)
+}
+
+// cycleFilter moves the stream filter from both to stdout to stderr and back.
+func (model *Model) cycleFilter() {
+	model.shell.filter = (model.shell.filter + 1) % streamFilterCount
+	model.refreshShellView(true)
 }
 
 // isShellTarget reports whether an agent is shown on the shell screen right now.
@@ -251,6 +345,12 @@ func (model Model) updateShellKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+l":
 		model.shell.lines = nil
 		model.refreshShellView(true)
+		return model, nil
+	case "tab":
+		model.cycleFocus()
+		return model, nil
+	case "ctrl+o":
+		model.cycleFilter()
 		return model, nil
 	case "ctrl+s":
 		return model.saveShellTranscripts()
@@ -299,11 +399,11 @@ func (model Model) submitShellLine() (tea.Model, tea.Cmd) {
 	model.setStatus(nil)
 
 	commands := []tea.Cmd{}
-	for _, target := range model.shell.targets {
+	for _, target := range model.focusedTargets() {
 		host := model.shellFor(target)
-		echo := labelStyle.Render(shellInputPrompt + line)
-		host.record(shellInputPrompt + line)
-		model.appendShellLine(target.Name(), echo)
+		echo := shellLine{agentName: target.Name(), text: shellInputPrompt + line, isInput: true}
+		host.record(echo)
+		model.appendShellLine(echo)
 		if host.shell == nil || host.shell.IsClosed() {
 			host.queue = append(host.queue, line)
 			if command := model.ensureShellOpen(host); command != nil {
@@ -326,9 +426,9 @@ func (model *Model) sendToHost(host *hostShell, line string) {
 	host.pending++
 }
 
-// interruptShells sends Ctrl-C to every open target shell.
+// interruptShells sends Ctrl-C to every open shell in the current view.
 func (model Model) interruptShells() (tea.Model, tea.Cmd) {
-	for _, target := range model.shell.targets {
+	for _, target := range model.focusedTargets() {
 		host := model.shellFor(target)
 		if host.shell == nil || host.shell.IsClosed() {
 			continue
@@ -346,7 +446,11 @@ func (model Model) saveShellTranscripts() (tea.Model, tea.Cmd) {
 	transcripts := make([]agent.Transcript, 0, len(model.shell.targets))
 	for _, target := range model.shell.targets {
 		host := model.shellFor(target)
-		transcripts = append(transcripts, agent.Transcript{AgentName: target.Name(), Lines: append([]string{}, host.transcript...)})
+		lines := make([]string, 0, len(host.transcript))
+		for _, line := range host.transcript {
+			lines = append(lines, line.text)
+		}
+		transcripts = append(transcripts, agent.Transcript{AgentName: target.Name(), Lines: lines})
 	}
 	savedPath, err := agent.WriteTranscripts(model.deps.Paths.OutputDirectory, transcripts, time.Now())
 	if err != nil {
@@ -398,10 +502,11 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 		if event.Err != nil {
 			host.err = event.Err
 		}
-		host.record("[shell closed]")
+		closedLine := shellLine{agentName: message.agentName, text: "[shell closed]", isInput: true}
+		host.record(closedLine)
 		if model.isShellTarget(message.agentName) {
 			follow := model.shell.viewport.AtBottom()
-			model.appendShellLine(message.agentName, dimStyle.Render("[shell closed]"))
+			model.appendShellLine(closedLine)
 			model.refreshShellView(follow)
 		}
 	case event.Finished:
@@ -409,10 +514,11 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 		host.lastExit = event.ExitCode
 		host.hasExit = true
 	default:
-		host.record(event.Text)
+		outputLine := shellLine{agentName: message.agentName, text: event.Text, stream: event.Stream}
+		host.record(outputLine)
 		if model.isShellTarget(message.agentName) {
 			follow := model.shell.viewport.AtBottom()
-			model.appendShellLine(message.agentName, event.Text)
+			model.appendShellLine(outputLine)
 			model.refreshShellView(follow)
 		}
 	}
@@ -423,6 +529,11 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 func (model Model) viewShell() string {
 	var builder strings.Builder
 	builder.WriteString(headerStyle.Render("Shell on " + targetNames(model.shell.targets)))
+	viewLabel := "all hosts"
+	if model.shell.focus != focusAll {
+		viewLabel = model.shell.targets[model.shell.focus].Name() + " only"
+	}
+	builder.WriteString(dimStyle.Render(fmt.Sprintf("  view: %s  streams: %s", viewLabel, model.shell.filter.label())))
 	builder.WriteString("\n")
 	for _, target := range model.shell.targets {
 		host := model.shells[target.Name()]

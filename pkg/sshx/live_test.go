@@ -178,6 +178,38 @@ func TestLiveShellKeepsStateBetweenCommands(t *testing.T) {
 	}
 }
 
+func TestLiveShellTagsStderrLines(t *testing.T) {
+	sshHost := liveHost(t)
+	shell, err := sshHost.OpenShell(context.Background())
+	if err != nil {
+		t.Fatalf("OpenShell returned error: %v", err)
+	}
+	defer shell.Close()
+
+	nonce, err := shell.Run("echo to-stdout; echo to-stderr >&2")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	streams := map[string]Stream{}
+	timeout := time.After(liveTimeout * 3)
+	for done := false; !done; {
+		select {
+		case event := <-shell.Events():
+			if event.Finished && event.Nonce == nonce {
+				done = true
+			} else if event.Text != "" {
+				streams[event.Text] = event.Stream
+			}
+		case <-timeout:
+			t.Fatalf("timed out; got %v", streams)
+		}
+	}
+	if streams["to-stdout"] != StreamStdout || streams["to-stderr"] != StreamStderr {
+		t.Fatalf("streams not tagged correctly: %v", streams)
+	}
+}
+
 func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
 	sshHost := liveHost(t)
 	shell, err := sshHost.OpenShell(context.Background())

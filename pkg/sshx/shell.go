@@ -18,6 +18,8 @@ const (
 	ShellCommand = "env PS1= PS2= PROMPT_COMMAND= TERM=dumb /bin/bash --noediting --norc --noprofile"
 
 	doneMarker        = "__CLOUD_COMMAND_DONE__"
+	stderrTag         = "\x02"
+	stderrRedirect    = "exec 2> >(while IFS= read -r line; do printf '\\002%s\\n' \"$line\"; done)\n"
 	interruptSequence = "\x03"
 	terminalName      = "dumb"
 	terminalRows      = 50
@@ -33,9 +35,18 @@ var (
 	shellRunCounter atomic.Uint64
 )
 
+// Stream says which output stream a line came from.
+type Stream int
+
+const (
+	StreamStdout Stream = iota
+	StreamStderr
+)
+
 // ShellEvent is one thing that happened on a remote shell: a line of output, a finished command, or the shell closing.
 type ShellEvent struct {
 	Text     string
+	Stream   Stream
 	Finished bool
 	Nonce    string
 	ExitCode int
@@ -54,6 +65,7 @@ type Shell struct {
 }
 
 // OpenShell starts a persistent bash session on the host under a pseudo-terminal.
+// Standard error is routed through a tagging loop so its lines can be told apart from standard output.
 func (sshHost *SshHost) OpenShell(ctx context.Context) (*Shell, error) {
 	if err := sshHost.ConnectContext(ctx); err != nil {
 		return nil, err
@@ -83,6 +95,10 @@ func (sshHost *SshHost) OpenShell(ctx context.Context) (*Shell, error) {
 	}
 	shell := &Shell{session: session, stdin: stdin, events: make(chan ShellEvent, eventBufferSize)}
 	go shell.readLoop(stdout)
+	if err := shell.write(stderrRedirect); err != nil {
+		_ = shell.Close()
+		return nil, err
+	}
 	return shell, nil
 }
 
@@ -97,9 +113,10 @@ func (shell *Shell) IsClosed() bool {
 }
 
 // Run sends a command followed by a completion marker and returns the nonce that identifies its Finished event.
+// The marker is written to standard error so it queues behind any stderr the command produced.
 func (shell *Shell) Run(command string) (string, error) {
 	nonce := strconv.FormatUint(shellRunCounter.Add(1), 10)
-	text := command + "\n" + fmt.Sprintf("printf '%s %%s %%d\\n' %s \"$?\"\n", doneMarker, nonce)
+	text := command + "\n" + fmt.Sprintf("printf '%s %%s %%d\\n' %s \"$?\" >&2\n", doneMarker, nonce)
 	if err := shell.write(text); err != nil {
 		return "", err
 	}
@@ -144,11 +161,21 @@ func (shell *Shell) readLoop(reader io.Reader) {
 	scanner.Buffer(make([]byte, 0, initialLineBuffer), maximumLineBuffer)
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r")
-		if nonce, exitCode, isMarker := ParseDoneMarker(line); isMarker {
-			shell.events <- ShellEvent{Finished: true, Nonce: nonce, ExitCode: exitCode}
-			continue
+		stream := StreamStdout
+		if strings.HasPrefix(line, stderrTag) {
+			stream = StreamStderr
+			line = strings.TrimPrefix(line, stderrTag)
 		}
-		shell.events <- ShellEvent{Text: line}
+		if index := strings.Index(line, doneMarker); index >= 0 {
+			if nonce, exitCode, isMarker := ParseDoneMarker(line[index:]); isMarker {
+				if partial := line[:index]; partial != "" {
+					shell.events <- ShellEvent{Text: partial, Stream: stream}
+				}
+				shell.events <- ShellEvent{Finished: true, Nonce: nonce, ExitCode: exitCode}
+				continue
+			}
+		}
+		shell.events <- ShellEvent{Text: line, Stream: stream}
 	}
 	waitErr := shell.session.Wait()
 	var exitError *ssh.ExitError
