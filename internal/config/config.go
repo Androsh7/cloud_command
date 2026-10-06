@@ -20,16 +20,17 @@ const (
 	OutputDirectoryName = "output"
 	LogFileName         = "cloud_command.log"
 
-	DefaultRegion              = "us-east-1"
-	DefaultInstanceType        = "t4g.nano"
-	DefaultArchitecture        = ec2.ArchitectureArm64
-	DefaultSshUser             = "ec2-user"
-	DefaultSshPort             = 22
-	DefaultSshTimeout          = 10 * time.Second
-	DefaultReadyTimeout        = 5 * time.Minute
-	DefaultPollInterval        = 5 * time.Second
-	DefaultRegionSearchThreads = 0
-	DefaultLogLevel            = "info"
+	DefaultRegion               = "us-east-1"
+	DefaultInstanceType         = "t4g.nano"
+	DefaultArchitecture         = ec2.ArchitectureArm64
+	DefaultSshUser              = "ec2-user"
+	DefaultSshPort              = 22
+	DefaultSshTimeout           = 10 * time.Second
+	DefaultReadyTimeout         = 5 * time.Minute
+	DefaultPollInterval         = 5 * time.Second
+	DefaultStateRefreshInterval = 15 * time.Second
+	DefaultRegionSearchThreads  = 0
+	DefaultLogLevel             = "info"
 
 	directoryPermissions = 0o700
 	filePermissions      = 0o600
@@ -46,31 +47,33 @@ type Paths struct {
 
 // Settings holds the user-editable defaults read from settings.toml.
 type Settings struct {
-	Region              string           `toml:"region"`
-	InstanceType        string           `toml:"instance_type"`
-	Architecture        ec2.Architecture `toml:"architecture"`
-	SshUser             string           `toml:"ssh_user"`
-	SshPort             int              `toml:"ssh_port"`
-	SshTimeout          time.Duration    `toml:"ssh_timeout"`
-	ReadyTimeout        time.Duration    `toml:"ready_timeout"`
-	PollInterval        time.Duration    `toml:"poll_interval"`
-	RegionSearchThreads int              `toml:"region_search_threads"`
-	LogLevel            string           `toml:"log_level"`
+	Region               string           `toml:"region"`
+	InstanceType         string           `toml:"instance_type"`
+	Architecture         ec2.Architecture `toml:"architecture"`
+	SshUser              string           `toml:"ssh_user"`
+	SshPort              int              `toml:"ssh_port"`
+	SshTimeout           time.Duration    `toml:"ssh_timeout"`
+	ReadyTimeout         time.Duration    `toml:"ready_timeout"`
+	PollInterval         time.Duration    `toml:"poll_interval"`
+	StateRefreshInterval time.Duration    `toml:"state_refresh_interval"`
+	RegionSearchThreads  int              `toml:"region_search_threads"`
+	LogLevel             string           `toml:"log_level"`
 }
 
 // DefaultSettings returns the settings written on first run.
 func DefaultSettings() Settings {
 	return Settings{
-		Region:              DefaultRegion,
-		InstanceType:        DefaultInstanceType,
-		Architecture:        DefaultArchitecture,
-		SshUser:             DefaultSshUser,
-		SshPort:             DefaultSshPort,
-		SshTimeout:          DefaultSshTimeout,
-		ReadyTimeout:        DefaultReadyTimeout,
-		PollInterval:        DefaultPollInterval,
-		RegionSearchThreads: DefaultRegionSearchThreads,
-		LogLevel:            DefaultLogLevel,
+		Region:               DefaultRegion,
+		InstanceType:         DefaultInstanceType,
+		Architecture:         DefaultArchitecture,
+		SshUser:              DefaultSshUser,
+		SshPort:              DefaultSshPort,
+		SshTimeout:           DefaultSshTimeout,
+		ReadyTimeout:         DefaultReadyTimeout,
+		PollInterval:         DefaultPollInterval,
+		StateRefreshInterval: DefaultStateRefreshInterval,
+		RegionSearchThreads:  DefaultRegionSearchThreads,
+		LogLevel:             DefaultLogLevel,
 	}
 }
 
@@ -93,8 +96,8 @@ func (settings Settings) Validate() error {
 	if settings.SshPort <= 0 {
 		return fmt.Errorf("ssh_port %d must be positive", settings.SshPort)
 	}
-	if settings.SshTimeout <= 0 || settings.ReadyTimeout <= 0 || settings.PollInterval <= 0 {
-		return errors.New("ssh_timeout, ready_timeout and poll_interval must be positive")
+	if settings.SshTimeout <= 0 || settings.ReadyTimeout <= 0 || settings.PollInterval <= 0 || settings.StateRefreshInterval <= 0 {
+		return errors.New("ssh_timeout, ready_timeout, poll_interval and state_refresh_interval must be positive")
 	}
 	if settings.RegionSearchThreads < 0 {
 		return fmt.Errorf("region_search_threads %d must not be negative", settings.RegionSearchThreads)

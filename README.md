@@ -39,6 +39,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 | `ssh_timeout` | `10s` | Dial timeout per connection |
 | `ready_timeout` | `5m` | Maximum wait for a new agent to run and accept SSH |
 | `poll_interval` | `5s` | SSH retry interval and job status refresh interval |
+| `state_refresh_interval` | `15s` | How often the agent list re-reads instance states from AWS |
 | `region_search_threads` | `0` | Regions scanned at once for detached instances; `0` means all |
 | `log_level` | `info` | `debug`, `info`, `warn` or `error` |
 

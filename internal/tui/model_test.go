@@ -449,3 +449,35 @@ func TestSendingShellLineClearsNotice(t *testing.T) {
 		t.Fatalf("notice before %q after %q", noticed.(Model).notice, sent.(Model).notice)
 	}
 }
+
+func TestAgentsLoadedSchedulesNextStateCheck(t *testing.T) {
+	model := testModel(t)
+
+	updated, command := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
+
+	if command == nil || updated.(Model).pollGeneration == 0 {
+		t.Fatal("expected a scheduled state check")
+	}
+}
+
+func TestAgentsPollStartsRefreshOnAgentsScreen(t *testing.T) {
+	model := testModel(t)
+	loaded, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
+
+	polled, _ := loaded.Update(agentsPollMsg{generation: loaded.(Model).pollGeneration})
+
+	if !polled.(Model).agents.refreshing || !strings.Contains(polled.View(), "Cloud Command ") {
+		t.Fatalf("expected a refresh with the title spinner, refreshing=%v", polled.(Model).agents.refreshing)
+	}
+}
+
+func TestStaleAgentsPollIsIgnored(t *testing.T) {
+	model := testModel(t)
+	loaded, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
+
+	polled, _ := loaded.Update(agentsPollMsg{generation: loaded.(Model).pollGeneration - 1})
+
+	if polled.(Model).agents.refreshing {
+		t.Fatal("stale poll must not refresh")
+	}
+}

@@ -62,6 +62,7 @@ type Model struct {
 	status            string
 	notice            string
 	messageGeneration int
+	pollGeneration    int
 	agents            agentsState
 	create            createState
 	creating          creatingState
@@ -181,6 +182,8 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case agentsLoadedMsg:
 		return model.applyAgentsLoaded(message)
+	case agentsPollMsg:
+		return model.applyAgentsPoll(message)
 	case detachedLoadedMsg:
 		return model.applyDetachedLoaded(message)
 	case createProgressMsg:

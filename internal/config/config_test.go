@@ -28,16 +28,17 @@ func TestLoadSettingsWritesDefaultsWhenMissing(t *testing.T) {
 func TestSaveSettingsRoundTrips(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), SettingsFileName)
 	expected := Settings{
-		Region:              "eu-west-1",
-		InstanceType:        "t3.micro",
-		Architecture:        ec2.ArchitectureX86_64,
-		SshUser:             "admin",
-		SshPort:             2222,
-		SshTimeout:          3 * time.Second,
-		ReadyTimeout:        90 * time.Second,
-		PollInterval:        time.Second,
-		RegionSearchThreads: 4,
-		LogLevel:            "debug",
+		Region:               "eu-west-1",
+		InstanceType:         "t3.micro",
+		Architecture:         ec2.ArchitectureX86_64,
+		SshUser:              "admin",
+		SshPort:              2222,
+		SshTimeout:           3 * time.Second,
+		ReadyTimeout:         90 * time.Second,
+		PollInterval:         time.Second,
+		StateRefreshInterval: 30 * time.Second,
+		RegionSearchThreads:  4,
+		LogLevel:             "debug",
 	}
 
 	if err := SaveSettings(settingsPath, expected); err != nil {

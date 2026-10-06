@@ -14,6 +14,11 @@ type agentsLoadedMsg struct {
 	err    error
 }
 
+// agentsPollMsg asks the agent list to re-read instance states.
+type agentsPollMsg struct {
+	generation int
+}
+
 // detachedLoadedMsg carries tagged instances found in AWS without a local record.
 type detachedLoadedMsg struct {
 	detached []ec2.DetachedAgent

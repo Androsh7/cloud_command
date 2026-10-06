@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -182,9 +183,10 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 // applyAgentsLoaded stores a finished refresh.
 func (model Model) applyAgentsLoaded(message agentsLoadedMsg) (tea.Model, tea.Cmd) {
 	model.agents.refreshing = false
+	nextPoll := model.scheduleAgentsPoll()
 	if message.err != nil {
 		model.setStatus(message.err)
-		return model, nil
+		return model, nextPoll
 	}
 	model.agents.agents = message.agents
 	model.agents.infos = message.infos
@@ -205,7 +207,27 @@ func (model Model) applyAgentsLoaded(message agentsLoadedMsg) (tea.Model, tea.Cm
 			}
 		}
 	}
-	return model, nil
+	return model, nextPoll
+}
+
+// scheduleAgentsPoll arranges the next automatic state check and invalidates any earlier one.
+func (model *Model) scheduleAgentsPoll() tea.Cmd {
+	model.pollGeneration++
+	generation := model.pollGeneration
+	return tea.Tick(model.deps.Settings.StateRefreshInterval, func(time.Time) tea.Msg { return agentsPollMsg{generation: generation} })
+}
+
+// applyAgentsPoll re-reads instance states when the list or detail screen is showing and nothing else is in flight.
+func (model Model) applyAgentsPoll(message agentsPollMsg) (tea.Model, tea.Cmd) {
+	if message.generation != model.pollGeneration {
+		return model, nil
+	}
+	onStateScreen := model.screen == screenAgents || model.screen == screenDetail
+	if !onStateScreen || model.agents.refreshing || model.agents.busy != "" {
+		return model, model.scheduleAgentsPoll()
+	}
+	model.agents.refreshing = true
+	return model, tea.Batch(model.spinner.Tick, model.refreshAgents())
 }
 
 // applyDetachedLoaded stores a finished region scan, hiding instances that have a local record.
