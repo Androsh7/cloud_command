@@ -174,7 +174,8 @@ func (model Model) viewJobs() string {
 	builder.WriteString(headerStyle.Render("Jobs on " + target.Name()))
 	builder.WriteString("\n")
 	if model.jobs.busy {
-		builder.WriteString(model.spinner.View() + " Working...\n")
+		builder.WriteString(model.spinner.View())
+		builder.WriteString(" Working...\n")
 	}
 	if len(target.Record.Jobs) == 0 {
 		builder.WriteString(dimStyle.Render("  No jobs. Press esc then J to start one."))
@@ -295,9 +296,15 @@ func (model Model) viewJobDetail() string {
 	builder.WriteString(headerStyle.Render(fmt.Sprintf("Job %s on %s", shortId(state.job.Id), model.detail.agent.Name())))
 	builder.WriteString("\n")
 	statusText := state.status.Summary()
-	builder.WriteString(labelStyle.Render("  Status   ") + statusText + "\n")
-	builder.WriteString(labelStyle.Render("  Started  ") + state.job.StartedAt.Local().Format(timestampLayout) + "\n")
-	builder.WriteString(labelStyle.Render("  Script   ") + previewScript(state.job.Script) + "\n")
+	for _, row := range [][2]string{
+		{"  Status   ", statusText},
+		{"  Started  ", state.job.StartedAt.Local().Format(timestampLayout)},
+		{"  Script   ", previewScript(state.job.Script)},
+	} {
+		builder.WriteString(labelStyle.Render(row[0]))
+		builder.WriteString(row[1])
+		builder.WriteString("\n")
+	}
 	stream := "stdout"
 	if state.showStderr {
 		stream = "stderr"

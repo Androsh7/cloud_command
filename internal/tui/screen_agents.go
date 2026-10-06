@@ -262,7 +262,10 @@ func (model Model) viewAgents() string {
 	builder.WriteString(headerStyle.Render("Agents"))
 	builder.WriteString("\n")
 	if state.busy != "" {
-		builder.WriteString(model.spinner.View() + " " + state.busy + "...\n")
+		builder.WriteString(model.spinner.View())
+		builder.WriteString(" ")
+		builder.WriteString(state.busy)
+		builder.WriteString("...\n")
 	}
 
 	if len(state.agents) == 0 && !state.refreshing {

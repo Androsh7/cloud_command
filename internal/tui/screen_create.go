@@ -316,7 +316,9 @@ func (model Model) viewCreating() string {
 		case state.finished:
 			builder.WriteString(dimStyle.Render("not started"))
 		default:
-			builder.WriteString(model.spinner.View() + " " + string(state.steps[name]))
+			builder.WriteString(model.spinner.View())
+			builder.WriteString(" ")
+			builder.WriteString(string(state.steps[name]))
 		}
 		builder.WriteString("\n")
 	}

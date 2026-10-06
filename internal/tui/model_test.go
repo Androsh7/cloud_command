@@ -466,7 +466,7 @@ func TestAgentsPollStartsRefreshOnAgentsScreen(t *testing.T) {
 
 	polled, _ := loaded.Update(agentsPollMsg{generation: loaded.(Model).pollGeneration})
 
-	if !polled.(Model).agents.refreshing || !strings.Contains(polled.View(), "Cloud Command ") {
+	if !polled.(Model).agents.refreshing || !strings.Contains(polled.View(), "Cloud Command DEVELOPMENT ") {
 		t.Fatalf("expected a refresh with the title spinner, refreshing=%v", polled.(Model).agents.refreshing)
 	}
 }
@@ -479,5 +479,15 @@ func TestStaleAgentsPollIsIgnored(t *testing.T) {
 
 	if polled.(Model).agents.refreshing {
 		t.Fatal("stale poll must not refresh")
+	}
+}
+
+func TestTitleShowsVersion(t *testing.T) {
+	model := testModel(t)
+
+	view := model.View()
+
+	if !strings.Contains(view, "Cloud Command DEVELOPMENT") {
+		t.Fatalf("title lacks version:\n%s", view)
 	}
 }

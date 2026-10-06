@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/androsh7/cloud_command/internal/config"
+	"github.com/androsh7/cloud_command/internal/version"
 	"github.com/androsh7/cloud_command/pkg/agent"
 )
 
@@ -216,9 +217,10 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the active screen with a shared title and footer.
 func (model Model) View() string {
 	var builder strings.Builder
-	builder.WriteString(titleStyle.Render("Cloud Command"))
+	builder.WriteString(titleStyle.Render(version.Title()))
 	if model.isRefreshing() {
-		builder.WriteString(" " + model.spinner.View())
+		builder.WriteString(" ")
+		builder.WriteString(model.spinner.View())
 	}
 	builder.WriteString("\n\n")
 	switch model.screen {

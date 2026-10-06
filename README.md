@@ -15,6 +15,8 @@ make build
 ./cloud_command
 ```
 
+`make build` stamps the version from `VERSION.txt` into the title, for example `Cloud Command v1.0.0`. `make build-dev` and `make run` show `Cloud Command DEVELOPMENT`.
+
 The first run writes `~/.cloud_command/settings.toml` with defaults and opens the agent list.
 
 ## Files under `~/.cloud_command`

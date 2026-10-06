@@ -1,13 +1,22 @@
-.PHONY: build run vet test test-live-ssh test-live-aws fmt sshd-up sshd-down
+VERSION := $(strip $(file < VERSION.txt))
+VERSION_PACKAGE := github.com/androsh7/cloud_command/internal/version
+RELEASE_LDFLAGS := -s -w -X $(VERSION_PACKAGE).Version=v$(VERSION)
 
+.PHONY: build build-dev run vet test test-live-ssh test-live-aws fmt sshd-up sshd-down
+
+# production build: title shows "Cloud Command v<VERSION.txt>"
 build:
-	go build -ldflags="-s -w" ./cmd/cloud_command
+	go build -ldflags="$(RELEASE_LDFLAGS)" ./cmd/cloud_command
+
+# development build: title shows "Cloud Command DEVELOPMENT"
+build-dev:
+	go build ./cmd/cloud_command
 
 run:
 	go run ./cmd/cloud_command
 
 fmt:
-	gofmt -l -w .
+	go fmt ./...
 
 vet:
 	go vet ./...

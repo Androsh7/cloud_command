@@ -44,6 +44,9 @@ func (model Model) viewConfirm() string {
 	builder.WriteString("\n\n  ")
 	builder.WriteString(model.confirm.prompt)
 	builder.WriteString("\n\n  ")
-	builder.WriteString(errorStyle.Render("y") + " yes    " + dimStyle.Render("n") + " no\n")
+	builder.WriteString(errorStyle.Render("y"))
+	builder.WriteString(" yes    ")
+	builder.WriteString(dimStyle.Render("n"))
+	builder.WriteString(" no\n")
 	return builder.String()
 }
