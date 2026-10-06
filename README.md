@@ -72,6 +72,55 @@ The agents screen also lists instances tagged `Type=cloud_command` that have no 
 
 A job runs as a transient unit named `job-<uuid>` with `RemainAfterExit=yes`, so its exit code stays visible until the job is removed. Standard output and standard error are written to `/tmp/job-<uuid>.stdout` and `/tmp/job-<uuid>.stderr` on the agent. Stopping a job runs `systemctl stop`; removing it also resets the unit and deletes the output files.
 
+## Command line
+
+Every operation the TUI offers for creating, listing and terminating agents and for jobs is also a subcommand, for scripts and CI. Add `--json` to get the raw result instead of a table.
+
+```bash
+cloud_command agents list [--detached] [--json]
+cloud_command agents create <name> [--count N] [--region R] [--instance-type T] [--architecture arm64|x86_64] [--no-wait] [--json]
+cloud_command agents terminate <name>... --yes
+cloud_command jobs list <agent> [--json]
+cloud_command jobs start <agent> [--sudo] -- '<script>'
+cloud_command jobs status <agent> <job-id> [--lines N] [--json]
+cloud_command jobs stop <agent> <job-id>
+cloud_command jobs remove <agent> <job-id>
+```
+
+`agents create` waits until the agents accept SSH unless `--no-wait` is given, in which case it returns right after launch and `agents list` shows the state. `agents terminate` refuses to run without `--yes`. Job ids may be shortened to any unambiguous prefix. Errors go to stderr and the exit code is 1 when anything failed.
+
+## MCP server
+
+`cloud_command mcp` serves the same operations to an MCP client over stdio. Claude Code picks it up from the `.mcp.json` in this repository; for another project or for Claude Desktop add:
+
+```json
+{
+  "mcpServers": {
+    "cloud-command": {
+      "type": "stdio",
+      "command": "cloud_command",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+`cloud_command` must be on `PATH`, or use the absolute path to the binary. The server reads settings and agents from `~/.cloud_command` like the TUI does, and its instructions tell the model to reuse agents, keep instances small and never terminate without permission.
+
+| Tool | Purpose |
+| --- | --- |
+| `list_agents` | Agents with instance state, public IP and job count; `include_detached` also scans every region |
+| `get_agent` | One agent with its ssh command and the state of each job |
+| `create_agents` | One agent or a numbered batch; `wait: false` returns after launch |
+| `terminate_agents` | Terminate agents, delete their key pairs and records |
+| `run_command` | Run a bash script on several agents and return exit code, stdout and stderr per agent |
+| `start_job` | Start a persistent systemd job and return its id |
+| `job_status` | State, exit code and trailing output of a job |
+| `stop_job` | Stop a job, keeping its record |
+| `remove_job` | Stop a job, delete its output and forget it |
+
+In `mcp` mode stdout carries the protocol, so nothing else is written there; logs go to `~/.cloud_command/cloud_command.log`. The TUI, the command line and the MCP server may run at the same time against the same directory. Each operation reloads the agent record before changing it and writes it atomically, but two processes changing the same agent's jobs in the same instant can still lose one record.
+
 ## Tests
 
 ```bash
