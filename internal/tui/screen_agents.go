@@ -151,16 +151,19 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if state.busy != "" {
 			return model, nil
 		}
-		if cursorAgent := state.cursorAgent(); cursorAgent != nil {
-			return model.openConfirm(
-				fmt.Sprintf("Terminate agent %q (instance %s)?", cursorAgent.Name(), cursorAgent.Record.InstanceId),
-				screenAgents,
-				func(model Model) (Model, tea.Cmd) {
-					model.closeShell(cursorAgent.Name())
-					model.agents.busy = "terminating " + cursorAgent.Name()
-					return model, tea.Batch(model.spinner.Tick, destroyAgent(model.ctx, cursorAgent))
-				},
-			), nil
+		if targets := state.targets(); len(targets) > 0 {
+			prompt := fmt.Sprintf("Terminate agent %q (instance %s)?", targets[0].Name(), targets[0].Record.InstanceId)
+			if len(targets) > 1 {
+				prompt = fmt.Sprintf("Terminate %d agents (%s)?", len(targets), targetNames(targets))
+			}
+			return model.openConfirm(prompt, screenAgents, func(model Model) (Model, tea.Cmd) {
+				for _, target := range targets {
+					model.closeShell(target.Name())
+					delete(model.agents.selected, target.Name())
+				}
+				model.agents.busy = fmt.Sprintf("terminating %d agent(s)", len(targets))
+				return model, tea.Batch(model.spinner.Tick, destroyAgents(model.ctx, targets))
+			}), nil
 		}
 		if detached, found := state.cursorDetached(); found {
 			return model.openConfirm(

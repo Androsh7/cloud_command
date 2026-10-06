@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -154,6 +156,23 @@ func stopJobOn(ctx context.Context, target *agent.Agent, job agent.Job) tea.Cmd 
 // removeJobOn stops one job, cleans up its files and forgets it.
 func removeJobOn(ctx context.Context, target *agent.Agent, job agent.Job) tea.Cmd {
 	return func() tea.Msg { return jobActionMsg{err: target.RemoveJob(ctx, job)} }
+}
+
+// destroyAgents terminates several managed agents at once and reports every failure together.
+func destroyAgents(ctx context.Context, targets []*agent.Agent) tea.Cmd {
+	return func() tea.Msg {
+		errs := make([]error, len(targets))
+		var waitGroup sync.WaitGroup
+		for index, target := range targets {
+			waitGroup.Add(1)
+			go func(index int, target *agent.Agent) {
+				defer waitGroup.Done()
+				errs[index] = target.Destroy(ctx)
+			}(index, target)
+		}
+		waitGroup.Wait()
+		return terminateFinishedMsg{name: fmt.Sprintf("%d agent(s)", len(targets)), err: errors.Join(errs...)}
+	}
 }
 
 // destroyAgent terminates a managed agent and removes its directory.

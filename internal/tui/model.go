@@ -227,7 +227,7 @@ func (model Model) View() string {
 func (model Model) helpLine() string {
 	switch model.screen {
 	case screenAgents:
-		return "enter: detail  n: new  b: batch  space: select  a: all  c: shell on selection  t: terminate  r: refresh  q: quit"
+		return "enter: detail  n: new  b: batch  space: select  a: all  c: shell on selection  t: terminate selection  r: refresh  q: quit"
 	case screenCreate:
 		return "tab/shift+tab: field  enter: create  esc: back"
 	case screenCreating:

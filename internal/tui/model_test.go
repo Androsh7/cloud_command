@@ -281,3 +281,23 @@ func TestShellTranscriptSurvivesLeavingScreen(t *testing.T) {
 		t.Fatalf("transcript lost: %s", reopened.View())
 	}
 }
+
+func TestTerminateWithSelectionPromptsForAllSelected(t *testing.T) {
+	model := testModel(t)
+	agents := []*agent.Agent{
+		{Record: agent.Record{Name: "alpha", InstanceId: "i-1"}},
+		{Record: agent.Record{Name: "bravo", InstanceId: "i-2"}},
+		{Record: agent.Record{Name: "charlie", InstanceId: "i-3"}},
+	}
+	updated, _ := model.Update(agentsLoadedMsg{agents: agents, infos: map[string]ec2.InstanceInfo{}})
+	updated = pressKey(updated, " ")
+	updated = pressKey(updated, "j")
+	updated = pressKey(updated, " ")
+
+	confirming := pressKey(updated, "t")
+
+	prompt := confirming.(Model).confirm.prompt
+	if confirming.(Model).screen != screenConfirm || !strings.Contains(prompt, "2 agents") || strings.Contains(prompt, "charlie") {
+		t.Fatalf("unexpected confirm prompt %q on screen %d", prompt, confirming.(Model).screen)
+	}
+}

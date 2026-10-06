@@ -46,7 +46,7 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 
 | Screen | Keys |
 | --- | --- |
-| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` shell on selection, `t` terminate, `r` refresh, `q` quit |
+| Agents | `enter` detail, `n` new agent, `b` batch, `space` select, `a` select all, `c` shell on selection, `t` terminate selection, `r` refresh, `q` quit |
 | Create form | `tab` / `shift+tab` move between fields, `enter` create, `esc` back |
 | Creating | `esc` cancel, `enter` back when finished |
 | Detail | `c` shell, `J` start persistent job, `j` jobs, `t` terminate, `r` refresh, `esc` back |
