@@ -268,7 +268,7 @@ func (model Model) viewAgents() string {
 		builder.WriteString(model.spinner.View() + " Scanning every region...\n")
 	}
 	for index, detached := range unmanaged {
-		line := fmt.Sprintf("    %-22s %-16s %s", detached.Id, detached.Region, detached.KeyPair)
+		line := fmt.Sprintf("    %-22s %-14s %-16s %s", detached.Id, detached.State, detached.Region, detached.KeyPair)
 		builder.WriteString(model.renderRow(line, len(state.agents)+index == state.cursor))
 	}
 	return builder.String()

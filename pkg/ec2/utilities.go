@@ -41,6 +41,7 @@ type DetachedAgent struct {
 	Id      string
 	KeyPair string
 	Region  string
+	State   string
 }
 
 var (
@@ -108,7 +109,12 @@ func GetEc2Regions(ctx context.Context) ([]string, error) {
 	return cachedRegions, cachedRegionsErr
 }
 
-// FindEc2InRegion returns every non-terminated instance in one region carrying the given Type tag.
+// IsGoneState reports whether an instance state means the instance is terminated or on its way there.
+func IsGoneState(state string) bool {
+	return state == string(types.InstanceStateNameTerminated) || state == string(types.InstanceStateNameShuttingDown)
+}
+
+// FindEc2InRegion returns every instance that is not terminated or shutting down in one region carrying the given Type tag.
 func FindEc2InRegion(ctx context.Context, region string, nameTag string) ([]DetachedAgent, error) {
 	client, err := GetEc2Client(ctx, region)
 	if err != nil {
@@ -126,13 +132,18 @@ func FindEc2InRegion(ctx context.Context, region string, nameTag string) ([]Deta
 		}
 		for _, reservation := range page.Reservations {
 			for _, instance := range reservation.Instances {
-				if instance.State != nil && instance.State.Name == types.InstanceStateNameTerminated {
+				state := ""
+				if instance.State != nil {
+					state = string(instance.State.Name)
+				}
+				if IsGoneState(state) {
 					continue
 				}
 				foundAgents = append(foundAgents, DetachedAgent{
 					Id:      aws.ToString(instance.InstanceId),
 					KeyPair: aws.ToString(instance.KeyName),
 					Region:  region,
+					State:   state,
 				})
 			}
 		}

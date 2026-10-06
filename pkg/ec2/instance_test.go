@@ -22,3 +22,12 @@ func TestIsNotFoundErrorIgnoresOtherErrors(t *testing.T) {
 		t.Fatal("expected other errors to not match")
 	}
 }
+
+func TestIsGoneStateMatchesTerminatingStates(t *testing.T) {
+	if !IsGoneState("terminated") || !IsGoneState("shutting-down") {
+		t.Fatal("terminated and shutting-down should count as gone")
+	}
+	if IsGoneState("running") || IsGoneState("stopped") {
+		t.Fatal("running and stopped should not count as gone")
+	}
+}
