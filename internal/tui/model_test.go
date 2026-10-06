@@ -1,0 +1,143 @@
+package tui
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/androsh7/cloud_command/internal/config"
+	"github.com/androsh7/cloud_command/pkg/agent"
+	"github.com/androsh7/cloud_command/pkg/ec2"
+	"github.com/androsh7/cloud_command/pkg/sshx"
+)
+
+func testModel(t *testing.T) Model {
+	t.Helper()
+	paths := config.PathsUnder(t.TempDir())
+	if err := config.EnsureDirectories(paths); err != nil {
+		t.Fatalf("EnsureDirectories returned error: %v", err)
+	}
+	return New(context.Background(), Dependencies{
+		Settings: config.DefaultSettings(),
+		Store:    agent.NewStore(paths.AgentsDirectory),
+		Paths:    paths,
+	})
+}
+
+func pressKey(model tea.Model, key string) tea.Model {
+	var message tea.KeyMsg
+	switch key {
+	case "enter":
+		message = tea.KeyMsg{Type: tea.KeyEnter}
+	case "esc":
+		message = tea.KeyMsg{Type: tea.KeyEsc}
+	default:
+		message = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+	}
+	updated, _ := model.Update(message)
+	return updated
+}
+
+func TestAgentsScreenShowsEmptyHint(t *testing.T) {
+	model := testModel(t)
+
+	updated, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
+	view := updated.View()
+
+	if !strings.Contains(view, "No agents yet") {
+		t.Fatalf("view does not show the empty hint:\n%s", view)
+	}
+}
+
+func TestPressingNOpensCreateForm(t *testing.T) {
+	model := testModel(t)
+
+	updated := pressKey(model, "n")
+
+	if updated.(Model).screen != screenCreate {
+		t.Fatalf("got screen %d, want create", updated.(Model).screen)
+	}
+	if !strings.Contains(updated.View(), "Create an agent") {
+		t.Fatal("create form is not rendered")
+	}
+}
+
+func TestPressingBOpensBatchForm(t *testing.T) {
+	model := testModel(t)
+
+	updated := pressKey(model, "b")
+
+	if !strings.Contains(updated.View(), "Count") {
+		t.Fatal("batch form does not show the count field")
+	}
+}
+
+func TestCreateFormRejectsInvalidName(t *testing.T) {
+	model := testModel(t)
+	updated := pressKey(model, "n")
+	updated = pressKey(updated, "bad name")
+
+	updated = pressKey(updated, "enter")
+
+	if updated.(Model).screen != screenCreate || updated.(Model).status == "" {
+		t.Fatalf("expected to stay on the form with an error, got screen %d status %q", updated.(Model).screen, updated.(Model).status)
+	}
+}
+
+func TestEscapeReturnsFromCreateForm(t *testing.T) {
+	model := testModel(t)
+	updated := pressKey(model, "n")
+
+	updated = pressKey(updated, "esc")
+
+	if updated.(Model).screen != screenAgents {
+		t.Fatalf("got screen %d, want agents", updated.(Model).screen)
+	}
+}
+
+func TestRenderResultsShowsExitCodeAndStderr(t *testing.T) {
+	results := []agent.CommandResult{{
+		AgentName: "alpha",
+		Response:  sshx.CommandResponse{Stdout: "hello\n", Stderr: "warning\n", ReturnCode: 2},
+	}}
+
+	rendered := renderResults(results)
+
+	for _, expected := range []string{"alpha", "exit 2", "hello", "warning"} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("rendered output lacks %q:\n%s", expected, rendered)
+		}
+	}
+}
+
+func TestConfirmNoReturnsToPreviousScreen(t *testing.T) {
+	model := testModel(t)
+	called := false
+	confirming := model.openConfirm("Sure?", screenAgents, func(model Model) (Model, tea.Cmd) {
+		called = true
+		return model, nil
+	})
+
+	updated := pressKey(confirming, "n")
+
+	if updated.(Model).screen != screenAgents || called {
+		t.Fatal("expected to return without running the action")
+	}
+}
+
+func TestConfirmYesRunsAction(t *testing.T) {
+	model := testModel(t)
+	called := false
+	confirming := model.openConfirm("Sure?", screenAgents, func(model Model) (Model, tea.Cmd) {
+		called = true
+		return model, nil
+	})
+
+	pressKey(confirming, "y")
+
+	if !called {
+		t.Fatal("expected the action to run")
+	}
+}
