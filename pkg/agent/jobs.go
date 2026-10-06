@@ -25,13 +25,13 @@ func (managedAgent *Agent) jobSpec(job Job) systemd.JobSpec {
 	return systemd.JobSpec{Id: job.Id, Script: job.Script, Executable: systemd.DefaultExecutable, User: user}
 }
 
-// runRaw runs an already-built command line without base64 wrapping.
+// runRaw runs an already-built command line, base64-wrapped like every other command so quoting never leaks.
 func (managedAgent *Agent) runRaw(ctx context.Context, line string) (sshx.CommandResponse, error) {
 	host, err := managedAgent.SshHost()
 	if err != nil {
 		return sshx.CommandResponse{}, err
 	}
-	response, err := host.RunCommandContext(ctx, line)
+	response, err := host.RunCommandContext(ctx, sshx.Command{Script: line}.Line())
 	if err != nil {
 		return sshx.CommandResponse{}, fmt.Errorf("agent %q: %w", managedAgent.Name(), err)
 	}
