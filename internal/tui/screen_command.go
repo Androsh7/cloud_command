@@ -40,7 +40,8 @@ type outputState struct {
 
 // openCommand switches to the script editor for the given targets.
 func (model Model) openCommand(targets []*agent.Agent, mode commandMode, returnTo screen) Model {
-	editor := textarea.New()
+	editor := model.command.textarea
+	editor.Reset()
 	editor.Placeholder = "echo hello from $(hostname)"
 	editor.CharLimit = scriptCharacterLimit
 	editor.ShowLineNumbers = true

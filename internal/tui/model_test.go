@@ -40,6 +40,30 @@ func pressKey(model tea.Model, key string) tea.Model {
 	return updated
 }
 
+func TestWindowResizeBeforeAnyScreenDoesNotPanic(t *testing.T) {
+	model := testModel(t)
+
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 205, Height: 50})
+	updated = pressKey(updated, "n")
+
+	if updated.(Model).screen != screenCreate {
+		t.Fatalf("got screen %d, want create", updated.(Model).screen)
+	}
+}
+
+func TestResizeWhileEditingScriptKeepsEditorUsable(t *testing.T) {
+	model := testModel(t)
+	updated, _ := model.Update(agentsLoadedMsg{agents: []*agent.Agent{}, infos: map[string]ec2.InstanceInfo{}})
+	editing := updated.(Model).openCommand([]*agent.Agent{}, commandModeRun, screenAgents)
+
+	resized, _ := editing.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	typed := pressKey(resized, "uname")
+
+	if !strings.Contains(typed.View(), "uname") {
+		t.Fatalf("editor lost its content: %s", typed.View())
+	}
+}
+
 func TestAgentsScreenShowsEmptyHint(t *testing.T) {
 	model := testModel(t)
 

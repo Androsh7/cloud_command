@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/androsh7/cloud_command/internal/config"
@@ -75,6 +77,11 @@ func New(ctx context.Context, deps Dependencies) Model {
 		height:  defaultHeight,
 		spinner: loadingSpinner,
 		agents:  newAgentsState(),
+		command: commandState{textarea: textarea.New()},
+		output:  outputState{viewport: viewport.New(defaultWidth, defaultHeight-chromeHeight)},
+		jobDetail: jobDetailState{
+			viewport: viewport.New(defaultWidth, defaultHeight-chromeHeight),
+		},
 	}
 }
 
