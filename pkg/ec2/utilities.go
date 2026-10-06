@@ -24,7 +24,7 @@ const (
 	SshSecurityGroupDescription   = "Allow ssh access (cloud command)"
 	SshPort                       = 22
 	AnyIpv4Cidr                   = "0.0.0.0/0"
-	KeyPairNotFoundErrorCode      = "InvalidKeyPair.NotFound"
+	DuplicateGroupErrorCode       = "InvalidGroup.Duplicate"
 	amazonLinuxAmiParameterFormat = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-%s"
 )
 
@@ -190,12 +190,8 @@ func CreateEc2KeyPair(ctx context.Context, region string, keyPairName string, pu
 	if err != nil {
 		return fmt.Errorf("reading public key %q: %w", publicKeyPath, err)
 	}
-	_, err = client.DeleteKeyPair(ctx, &ec2.DeleteKeyPairInput{KeyName: aws.String(keyPairName)})
-	if err != nil {
-		var apiError smithy.APIError
-		if !errors.As(err, &apiError) || apiError.ErrorCode() != KeyPairNotFoundErrorCode {
-			return fmt.Errorf("deleting key pair %q: %w", keyPairName, err)
-		}
+	if err := DeleteKeyPair(ctx, region, keyPairName); err != nil {
+		return err
 	}
 	_, err = client.ImportKeyPair(ctx, &ec2.ImportKeyPairInput{
 		KeyName:           aws.String(keyPairName),
@@ -325,6 +321,9 @@ func CreateSecurityGroup(ctx context.Context, region string, vpcId string) (stri
 		Description: aws.String(SshSecurityGroupDescription),
 		VpcId:       aws.String(vpcId),
 	})
+	if isDuplicateGroupError(err) {
+		return CreateSecurityGroup(ctx, region, vpcId)
+	}
 	if err != nil {
 		return "", fmt.Errorf("creating security group in vpc %q: %w", vpcId, err)
 	}
@@ -342,4 +341,10 @@ func CreateSecurityGroup(ctx context.Context, region string, vpcId string) (stri
 		return "", fmt.Errorf("authorizing ssh ingress on security group %q: %w", securityGroupId, err)
 	}
 	return securityGroupId, nil
+}
+
+// isDuplicateGroupError reports whether AWS rejected a security group because another caller just created it.
+func isDuplicateGroupError(err error) bool {
+	var apiError smithy.APIError
+	return errors.As(err, &apiError) && apiError.ErrorCode() == DuplicateGroupErrorCode
 }
