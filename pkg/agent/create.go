@@ -60,6 +60,24 @@ func (reporter Reporter) report(agentName string, step Step) {
 // Create provisions one agent and blocks until it accepts SSH connections.
 // When provisioning fails or the context is cancelled, everything created so far is removed again.
 func Create(ctx context.Context, store *Store, spec Spec, options CreateOptions, reporter Reporter) (*Agent, error) {
+	newAgent, err := Launch(ctx, store, spec, options, reporter)
+	if err != nil {
+		return nil, err
+	}
+	if err := newAgent.WaitUntilReady(ctx, options, reporter); err != nil {
+		if ctx.Err() != nil {
+			newAgent.rollback(reporter)
+			return nil, fmt.Errorf("creation of agent %q cancelled: %w", spec.Name, err)
+		}
+		return newAgent, err
+	}
+	reporter.report(spec.Name, StepDone)
+	return newAgent, nil
+}
+
+// Launch provisions one agent up to the point where its instance is launched, without waiting for it to boot.
+// When provisioning fails, everything created so far is removed again.
+func Launch(ctx context.Context, store *Store, spec Spec, options CreateOptions, reporter Reporter) (*Agent, error) {
 	reporter.report(spec.Name, StepDirectory)
 	directory, err := store.NewAgentDirectory(spec.Name)
 	if err != nil {
@@ -85,14 +103,6 @@ func Create(ctx context.Context, store *Store, spec Spec, options CreateOptions,
 		newAgent.rollback(reporter)
 		return nil, err
 	}
-	if err := newAgent.WaitUntilReady(ctx, options, reporter); err != nil {
-		if ctx.Err() != nil {
-			newAgent.rollback(reporter)
-			return nil, fmt.Errorf("creation of agent %q cancelled: %w", spec.Name, err)
-		}
-		return newAgent, err
-	}
-	reporter.report(spec.Name, StepDone)
 	return newAgent, nil
 }
 
