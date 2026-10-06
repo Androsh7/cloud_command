@@ -19,7 +19,6 @@ const (
 
 	doneMarker        = "__CLOUD_COMMAND_DONE__"
 	stderrTag         = "\x02"
-	stderrRedirect    = "exec 2> >(while IFS= read -r line; do printf '\\002%s\\n' \"$line\"; done)\n"
 	interruptSequence = "\x03"
 	terminalName      = "dumb"
 	terminalRows      = 50
@@ -29,11 +28,10 @@ const (
 	maximumLineBuffer = 4 * 1024 * 1024
 )
 
-var (
-	ErrShellClosed = errors.New("shell is closed")
+// shellSetup routes stderr through a tagging loop and makes bash print an exit marker after every command line.
+const shellSetup = `exec 2> >(while IFS= read -r line; do printf '\002%s\n' "$line"; done); PROMPT_COMMAND='printf "` + doneMarker + ` %d\n" "$?" >&2'` + "\n"
 
-	shellRunCounter atomic.Uint64
-)
+var ErrShellClosed = errors.New("shell is closed")
 
 // Stream says which output stream a line came from.
 type Stream int
@@ -44,11 +42,11 @@ const (
 )
 
 // ShellEvent is one thing that happened on a remote shell: a line of output, a finished command, or the shell closing.
+// Finished events arrive in the order commands were sent.
 type ShellEvent struct {
 	Text     string
 	Stream   Stream
 	Finished bool
-	Nonce    string
 	ExitCode int
 	Closed   bool
 	Err      error
@@ -56,16 +54,19 @@ type ShellEvent struct {
 
 // Shell is a persistent remote bash session whose output is streamed as events.
 type Shell struct {
-	session   *ssh.Session
-	stdin     io.WriteCloser
-	events    chan ShellEvent
-	writeLock sync.Mutex
-	closeOnce sync.Once
-	closed    atomic.Bool
+	session    *ssh.Session
+	stdin      io.WriteCloser
+	events     chan ShellEvent
+	writeLock  sync.Mutex
+	closeOnce  sync.Once
+	closed     atomic.Bool
+	setupSeen  atomic.Bool
+	setupError error
 }
 
 // OpenShell starts a persistent bash session on the host under a pseudo-terminal.
-// Standard error is routed through a tagging loop so its lines can be told apart from standard output.
+// Standard error is routed through a tagging loop so its lines can be told apart from standard output,
+// and bash itself reports each command's exit code the moment the command finishes.
 func (sshHost *SshHost) OpenShell(ctx context.Context) (*Shell, error) {
 	if err := sshHost.ConnectContext(ctx); err != nil {
 		return nil, err
@@ -95,7 +96,7 @@ func (sshHost *SshHost) OpenShell(ctx context.Context) (*Shell, error) {
 	}
 	shell := &Shell{session: session, stdin: stdin, events: make(chan ShellEvent, eventBufferSize)}
 	go shell.readLoop(stdout)
-	if err := shell.write(stderrRedirect); err != nil {
+	if err := shell.write(shellSetup); err != nil {
 		_ = shell.Close()
 		return nil, err
 	}
@@ -112,15 +113,9 @@ func (shell *Shell) IsClosed() bool {
 	return shell.closed.Load()
 }
 
-// Run sends a command followed by a completion marker and returns the nonce that identifies its Finished event.
-// The marker is written to standard error so it queues behind any stderr the command produced.
-func (shell *Shell) Run(command string) (string, error) {
-	nonce := strconv.FormatUint(shellRunCounter.Add(1), 10)
-	text := command + "\n" + fmt.Sprintf("printf '%s %%s %%d\\n' %s \"$?\" >&2\n", doneMarker, nonce)
-	if err := shell.write(text); err != nil {
-		return "", err
-	}
-	return nonce, nil
+// Run sends one command line. Bash reports its completion as a Finished event once it has run.
+func (shell *Shell) Run(command string) error {
+	return shell.write(command + "\n")
 }
 
 // Interrupt sends Ctrl-C to the terminal, interrupting the foreground command.
@@ -160,42 +155,60 @@ func (shell *Shell) readLoop(reader io.Reader) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, initialLineBuffer), maximumLineBuffer)
 	for scanner.Scan() {
-		line := strings.TrimRight(scanner.Text(), "\r")
-		stream := StreamStdout
-		if strings.HasPrefix(line, stderrTag) {
-			stream = StreamStderr
-			line = strings.TrimPrefix(line, stderrTag)
-		}
-		if index := strings.Index(line, doneMarker); index >= 0 {
-			if nonce, exitCode, isMarker := ParseDoneMarker(line[index:]); isMarker {
-				if partial := line[:index]; partial != "" {
-					shell.events <- ShellEvent{Text: partial, Stream: stream}
-				}
-				shell.events <- ShellEvent{Finished: true, Nonce: nonce, ExitCode: exitCode}
-				continue
+		for _, segment := range strings.Split(scanner.Text(), "\r") {
+			if segment != "" {
+				shell.handleLine(segment)
 			}
 		}
-		shell.events <- ShellEvent{Text: line, Stream: stream}
+	}
+	if err := scanner.Err(); err != nil {
+		shell.setupError = err
 	}
 	waitErr := shell.session.Wait()
 	var exitError *ssh.ExitError
 	if errors.As(waitErr, &exitError) || errors.Is(waitErr, io.EOF) {
 		waitErr = nil
 	}
+	if waitErr == nil {
+		waitErr = shell.setupError
+	}
 	shell.closed.Store(true)
 	shell.events <- ShellEvent{Closed: true, Err: waitErr}
 	close(shell.events)
 }
 
-// ParseDoneMarker extracts the nonce and exit code from a completion marker line.
-func ParseDoneMarker(line string) (string, int, bool) {
+// handleLine classifies one line of terminal output and emits the matching events.
+// The first marker belongs to the setup line and is swallowed.
+func (shell *Shell) handleLine(line string) {
+	stream := StreamStdout
+	if strings.HasPrefix(line, stderrTag) {
+		stream = StreamStderr
+		line = strings.TrimPrefix(line, stderrTag)
+	}
+	if index := strings.Index(line, doneMarker); index >= 0 {
+		if exitCode, isMarker := ParseDoneMarker(line[index:]); isMarker {
+			if partial := line[:index]; partial != "" {
+				shell.events <- ShellEvent{Text: partial, Stream: stream}
+			}
+			if shell.setupSeen.CompareAndSwap(false, true) {
+				return
+			}
+			shell.events <- ShellEvent{Finished: true, ExitCode: exitCode}
+			return
+		}
+	}
+	shell.events <- ShellEvent{Text: line, Stream: stream}
+}
+
+// ParseDoneMarker extracts the exit code from a completion marker line.
+func ParseDoneMarker(line string) (int, bool) {
 	fields := strings.Fields(line)
-	if len(fields) != 3 || fields[0] != doneMarker {
-		return "", 0, false
+	if len(fields) != 2 || fields[0] != doneMarker {
+		return 0, false
 	}
-	exitCode, err := strconv.Atoi(fields[2])
+	exitCode, err := strconv.Atoi(fields[1])
 	if err != nil {
-		return "", 0, false
+		return 0, false
 	}
-	return fields[1], exitCode, true
+	return exitCode, true
 }

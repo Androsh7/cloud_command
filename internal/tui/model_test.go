@@ -242,6 +242,7 @@ func TestShellEventAppendsOutputToView(t *testing.T) {
 	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
 	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
 
+	opened.(Model).shells["alpha"].pending = 1
 	updated, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Text: "streamed-line"}})
 	finished, _ := updated.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Finished: true, ExitCode: 7}})
 
@@ -373,5 +374,31 @@ func TestShellStreamFilterHidesStdout(t *testing.T) {
 	}
 	if strings.Contains(stderrOnly.View(), "out-line") || !strings.Contains(stderrOnly.View(), "err-line") {
 		t.Fatalf("stderr filter wrong:\n%s", stderrOnly.View())
+	}
+}
+
+func TestShellFinishedEventAddsExitLine(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	opened.(Model).shells["alpha"].pending = 1
+
+	finished, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Finished: true, ExitCode: 2}})
+
+	host := finished.(Model).shells["alpha"]
+	if host.pending != 0 || !strings.Contains(finished.View(), "[exit 2]") {
+		t.Fatalf("exit line missing or pending wrong (%d):\n%s", host.pending, finished.View())
+	}
+}
+
+func TestShellIgnoresFinishedWithoutPendingCommand(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+
+	finished, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Finished: true, ExitCode: 0}})
+
+	if strings.Contains(finished.View(), "[exit") {
+		t.Fatalf("stray exit line shown:\n%s", finished.View())
 	}
 }

@@ -128,8 +128,8 @@ func TestLiveRunCommandContextStopsOnCancel(t *testing.T) {
 	}
 }
 
-// collectUntilFinished drains events until the command with the nonce finishes, returning the output lines.
-func collectUntilFinished(t *testing.T, shell *Shell, nonce string) ([]string, int) {
+// collectUntilFinished drains events until the next command finishes, returning the output lines and exit code.
+func collectUntilFinished(t *testing.T, shell *Shell) ([]string, int) {
 	t.Helper()
 	lines := []string{}
 	timeout := time.After(liveTimeout * 3)
@@ -139,14 +139,14 @@ func collectUntilFinished(t *testing.T, shell *Shell, nonce string) ([]string, i
 			if !open {
 				t.Fatal("shell closed before the command finished")
 			}
-			if event.Finished && event.Nonce == nonce {
+			if event.Finished {
 				return lines, event.ExitCode
 			}
 			if event.Text != "" {
 				lines = append(lines, event.Text)
 			}
 		case <-timeout:
-			t.Fatalf("timed out waiting for command %s; got %v", nonce, lines)
+			t.Fatalf("timed out waiting for the command to finish; got %v", lines)
 		}
 	}
 }
@@ -159,13 +159,12 @@ func TestLiveShellKeepsStateBetweenCommands(t *testing.T) {
 	}
 	defer shell.Close()
 
-	nonce, err := shell.Run("cd /tmp && export LIVE_SHELL_VALUE=persisted")
-	if err != nil {
+	if err := shell.Run("cd /tmp && export LIVE_SHELL_VALUE=persisted"); err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
-	_, exitCode := collectUntilFinished(t, shell, nonce)
-	nonce, _ = shell.Run("pwd; echo $LIVE_SHELL_VALUE; echo to-stderr >&2")
-	lines, secondExitCode := collectUntilFinished(t, shell, nonce)
+	_, exitCode := collectUntilFinished(t, shell)
+	_ = shell.Run("pwd; echo $LIVE_SHELL_VALUE; echo to-stderr >&2")
+	lines, secondExitCode := collectUntilFinished(t, shell)
 
 	if exitCode != 0 || secondExitCode != 0 {
 		t.Fatalf("got exit codes %d and %d", exitCode, secondExitCode)
@@ -186,8 +185,7 @@ func TestLiveShellTagsStderrLines(t *testing.T) {
 	}
 	defer shell.Close()
 
-	nonce, err := shell.Run("echo to-stdout; echo to-stderr >&2")
-	if err != nil {
+	if err := shell.Run("echo to-stdout; echo to-stderr >&2"); err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
@@ -196,7 +194,7 @@ func TestLiveShellTagsStderrLines(t *testing.T) {
 	for done := false; !done; {
 		select {
 		case event := <-shell.Events():
-			if event.Finished && event.Nonce == nonce {
+			if event.Finished {
 				done = true
 			} else if event.Text != "" {
 				streams[event.Text] = event.Stream
@@ -210,6 +208,24 @@ func TestLiveShellTagsStderrLines(t *testing.T) {
 	}
 }
 
+func TestLiveShellReportsFinishWhenCommandReadsStdin(t *testing.T) {
+	sshHost := liveHost(t)
+	shell, err := sshHost.OpenShell(context.Background())
+	if err != nil {
+		t.Fatalf("OpenShell returned error: %v", err)
+	}
+	defer shell.Close()
+
+	if err := shell.Run("head -c 0 -; echo read-done"); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	lines, exitCode := collectUntilFinished(t, shell)
+
+	if exitCode != 0 || !strings.Contains(strings.Join(lines, "\n"), "read-done") {
+		t.Fatalf("stdin-reading command did not report completion: %v (exit %d)", lines, exitCode)
+	}
+}
+
 func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
 	sshHost := liveHost(t)
 	shell, err := sshHost.OpenShell(context.Background())
@@ -218,21 +234,20 @@ func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
 	}
 	defer shell.Close()
 
-	nonce, err := shell.Run("sleep 30")
-	if err != nil {
+	if err := shell.Run("sleep 30"); err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
 	time.Sleep(time.Second)
 	if err := shell.Interrupt(); err != nil {
 		t.Fatalf("Interrupt returned error: %v", err)
 	}
-	_, exitCode := collectUntilFinished(t, shell, nonce)
+	_, exitCode := collectUntilFinished(t, shell)
 
 	if exitCode == 0 {
 		t.Fatal("interrupted sleep should not exit with 0")
 	}
-	nonce, _ = shell.Run("echo still-alive")
-	lines, _ := collectUntilFinished(t, shell, nonce)
+	_ = shell.Run("echo still-alive")
+	lines, _ := collectUntilFinished(t, shell)
 	if !strings.Contains(strings.Join(lines, "\n"), "still-alive") {
 		t.Fatalf("shell did not survive the interrupt: %v", lines)
 	}

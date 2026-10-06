@@ -54,6 +54,7 @@ type shellLine struct {
 	text      string
 	stream    sshx.Stream
 	isInput   bool
+	isStatus  bool
 }
 
 // hostShell is one agent's persistent remote shell and what the interface knows about it.
@@ -253,7 +254,7 @@ func (model Model) showsLine(line shellLine) bool {
 		line.agentName != model.shell.targets[model.shell.focus].Name() {
 		return false
 	}
-	if line.isInput {
+	if line.isInput || line.isStatus {
 		return true
 	}
 	switch model.shell.filter {
@@ -275,6 +276,8 @@ func (model Model) renderShellLine(line shellLine) string {
 	switch {
 	case line.isInput:
 		return prefix + labelStyle.Render(line.text)
+	case line.isStatus:
+		return prefix + dimStyle.Render(line.text)
 	case line.stream == sshx.StreamStderr:
 		return prefix + errorStyle.Render(line.text)
 	default:
@@ -419,7 +422,7 @@ func (model Model) submitShellLine() (tea.Model, tea.Cmd) {
 
 // sendToHost runs one line on a host's open shell.
 func (model *Model) sendToHost(host *hostShell, line string) {
-	if _, err := host.shell.Run(line); err != nil {
+	if err := host.shell.Run(line); err != nil {
 		host.err = err
 		return
 	}
@@ -510,9 +513,19 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 			model.refreshShellView(follow)
 		}
 	case event.Finished:
-		host.pending = max(host.pending-1, 0)
+		if host.pending == 0 {
+			return model, next
+		}
+		host.pending--
 		host.lastExit = event.ExitCode
 		host.hasExit = true
+		statusLine := shellLine{agentName: message.agentName, text: fmt.Sprintf("[exit %d]", event.ExitCode), isStatus: true}
+		host.record(statusLine)
+		if model.isShellTarget(message.agentName) {
+			follow := model.shell.viewport.AtBottom()
+			model.appendShellLine(statusLine)
+			model.refreshShellView(follow)
+		}
 	default:
 		outputLine := shellLine{agentName: message.agentName, text: event.Text, stream: event.Stream}
 		host.record(outputLine)
