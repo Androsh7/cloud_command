@@ -182,17 +182,18 @@ func (model *Model) ensureShellOpen(host *hostShell) tea.Cmd {
 	host.opening = true
 	host.err = nil
 	host.pending = 0
-	return openShellOn(model.ctx, host.agent, model.shellEvents)
+	rows, columns := model.terminalSize()
+	return openShellOn(model.ctx, host.agent, model.shellEvents, rows, columns)
 }
 
 // openShellOn connects a shell to one agent and forwards its events into the shared channel.
-func openShellOn(ctx context.Context, target *agent.Agent, events chan<- tea.Msg) tea.Cmd {
+func openShellOn(ctx context.Context, target *agent.Agent, events chan<- tea.Msg, rows int, columns int) tea.Cmd {
 	return func() tea.Msg {
 		sshHost, err := target.SshHost()
 		if err != nil {
 			return shellOpenedMsg{agentName: target.Name(), err: err}
 		}
-		shell, err := sshHost.OpenShell(ctx)
+		shell, err := sshHost.OpenShell(ctx, rows, columns)
 		if err != nil {
 			return shellOpenedMsg{agentName: target.Name(), err: err}
 		}
@@ -230,6 +231,25 @@ func (model *Model) layoutShell() {
 	model.shell.viewport.Width = model.width
 	model.shell.viewport.Height = max(height, 3)
 	model.shell.input.Width = max(model.width-len(shellInputPrompt)-2, 20)
+	rows, columns := model.terminalSize()
+	for _, host := range model.shells {
+		if host.shell != nil && !host.shell.IsClosed() {
+			_ = host.shell.Resize(rows, columns)
+		}
+	}
+}
+
+// terminalSize returns the remote terminal size that fits the view once host prefixes are accounted for.
+func (model Model) terminalSize() (int, int) {
+	longestName := 0
+	for name := range model.shells {
+		longestName = max(longestName, len(name))
+	}
+	prefixWidth := 0
+	if len(model.shells) > 1 {
+		prefixWidth = longestName + len("[] ")
+	}
+	return max(model.shell.viewport.Height, 5), max(model.width-prefixWidth-1, 40)
 }
 
 // appendShellLine adds one line to the combined view.
@@ -433,14 +453,14 @@ func (model *Model) sendToHost(host *hostShell, line string) {
 func (model Model) interruptShells() (tea.Model, tea.Cmd) {
 	for _, target := range model.focusedTargets() {
 		host := model.shellFor(target)
-		if host.shell == nil || host.shell.IsClosed() {
+		if host.shell == nil || host.shell.IsClosed() || host.pending == 0 {
 			continue
 		}
 		if err := host.shell.Interrupt(); err != nil {
 			host.err = err
 		}
 	}
-	model.notice = "interrupt sent"
+	model.notice = "interrupt sent to running commands"
 	return model, nil
 }
 

@@ -153,7 +153,7 @@ func collectUntilFinished(t *testing.T, shell *Shell) ([]string, int) {
 
 func TestLiveShellKeepsStateBetweenCommands(t *testing.T) {
 	sshHost := liveHost(t)
-	shell, err := sshHost.OpenShell(context.Background())
+	shell, err := sshHost.OpenShell(context.Background(), DefaultRows, DefaultColumns)
 	if err != nil {
 		t.Fatalf("OpenShell returned error: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestLiveShellKeepsStateBetweenCommands(t *testing.T) {
 
 func TestLiveShellTagsStderrLines(t *testing.T) {
 	sshHost := liveHost(t)
-	shell, err := sshHost.OpenShell(context.Background())
+	shell, err := sshHost.OpenShell(context.Background(), DefaultRows, DefaultColumns)
 	if err != nil {
 		t.Fatalf("OpenShell returned error: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestLiveShellTagsStderrLines(t *testing.T) {
 
 func TestLiveShellReportsFinishWhenCommandReadsStdin(t *testing.T) {
 	sshHost := liveHost(t)
-	shell, err := sshHost.OpenShell(context.Background())
+	shell, err := sshHost.OpenShell(context.Background(), DefaultRows, DefaultColumns)
 	if err != nil {
 		t.Fatalf("OpenShell returned error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestLiveShellReportsFinishWhenCommandReadsStdin(t *testing.T) {
 
 func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
 	sshHost := liveHost(t)
-	shell, err := sshHost.OpenShell(context.Background())
+	shell, err := sshHost.OpenShell(context.Background(), DefaultRows, DefaultColumns)
 	if err != nil {
 		t.Fatalf("OpenShell returned error: %v", err)
 	}
@@ -250,5 +250,35 @@ func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
 	lines, _ := collectUntilFinished(t, shell)
 	if !strings.Contains(strings.Join(lines, "\n"), "still-alive") {
 		t.Fatalf("shell did not survive the interrupt: %v", lines)
+	}
+}
+
+func TestLiveShellSurvivesInterruptWhileIdle(t *testing.T) {
+	sshHost := liveHost(t)
+	shell, err := sshHost.OpenShell(context.Background(), DefaultRows, DefaultColumns)
+	if err != nil {
+		t.Fatalf("OpenShell returned error: %v", err)
+	}
+	defer shell.Close()
+	_ = shell.Run("echo before")
+	collectUntilFinished(t, shell)
+
+	if err := shell.Interrupt(); err != nil {
+		t.Fatalf("Interrupt returned error: %v", err)
+	}
+	time.Sleep(liveRetryInterval)
+	_ = shell.Run("echo after-idle-interrupt; echo err-after >&2")
+	lines, _ := collectUntilFinished(t, shell)
+	if shell.IsClosed() {
+		t.Fatal("shell closed after an idle interrupt")
+	}
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "after-idle-interrupt") && !strings.Contains(joined, "err-after") {
+		_ = shell.Run("echo still-here")
+		lines, _ = collectUntilFinished(t, shell)
+		joined = strings.Join(lines, "\n")
+	}
+	if !strings.Contains(joined, "err-after") && !strings.Contains(joined, "still-here") {
+		t.Fatalf("shell stopped producing output after an idle interrupt: %q", joined)
 	}
 }
