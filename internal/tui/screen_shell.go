@@ -420,6 +420,7 @@ func (model Model) submitShellLine() (tea.Model, tea.Cmd) {
 	model.shell.historyIndex = len(model.shell.history)
 	model.shell.input.SetValue("")
 	model.setStatus(nil)
+	model.notice = ""
 
 	commands := []tea.Cmd{}
 	for _, target := range model.focusedTargets() {

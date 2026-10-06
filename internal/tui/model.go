@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -39,32 +40,39 @@ const (
 )
 
 const (
-	defaultWidth  = 100
-	defaultHeight = 30
-	chromeHeight  = 6
+	defaultWidth    = 100
+	defaultHeight   = 30
+	chromeHeight    = 6
+	messageLifetime = 8 * time.Second
 )
+
+// expireMessageAfter clears the footer messages once the lifetime passes, unless a newer message replaced them.
+func expireMessageAfter(lifetime time.Duration, generation int) tea.Cmd {
+	return tea.Tick(lifetime, func(time.Time) tea.Msg { return clearMessageMsg{generation: generation} })
+}
 
 // Model holds the state of every screen.
 type Model struct {
-	ctx         context.Context
-	deps        Dependencies
-	screen      screen
-	width       int
-	height      int
-	spinner     spinner.Model
-	status      string
-	notice      string
-	agents      agentsState
-	create      createState
-	creating    creatingState
-	detail      detailState
-	command     commandState
-	shell       shellState
-	shells      map[string]*hostShell
-	shellEvents chan tea.Msg
-	jobs        jobsState
-	jobDetail   jobDetailState
-	confirm     confirmState
+	ctx               context.Context
+	deps              Dependencies
+	screen            screen
+	width             int
+	height            int
+	spinner           spinner.Model
+	status            string
+	notice            string
+	messageGeneration int
+	agents            agentsState
+	create            createState
+	creating          creatingState
+	detail            detailState
+	command           commandState
+	shell             shellState
+	shells            map[string]*hostShell
+	shellEvents       chan tea.Msg
+	jobs              jobsState
+	jobDetail         jobDetailState
+	confirm           confirmState
 }
 
 // New returns a model that starts on the agents screen.
@@ -101,7 +109,27 @@ func (model Model) Init() tea.Cmd {
 
 // Update applies one message to the model.
 func (model Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	previousStatus, previousNotice := model.status, model.notice
+	updated, command := model.update(message)
+	next := updated.(Model)
+	statusChanged := next.status != "" && next.status != previousStatus
+	noticeChanged := next.notice != "" && next.notice != previousNotice
+	if statusChanged || noticeChanged {
+		next.messageGeneration++
+		command = tea.Batch(command, expireMessageAfter(messageLifetime, next.messageGeneration))
+	}
+	return next, command
+}
+
+// update applies one message to the model without the footer message bookkeeping.
+func (model Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case clearMessageMsg:
+		if message.generation == model.messageGeneration {
+			model.status = ""
+			model.notice = ""
+		}
+		return model, nil
 	case tea.WindowSizeMsg:
 		model.width = message.Width
 		model.height = message.Height

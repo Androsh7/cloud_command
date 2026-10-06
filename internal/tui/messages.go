@@ -83,6 +83,11 @@ type terminateFinishedMsg struct {
 	err  error
 }
 
+// clearMessageMsg asks the footer to drop its status and notice when nothing newer replaced them.
+type clearMessageMsg struct {
+	generation int
+}
+
 // errorMsg carries an error to show in the footer.
 type errorMsg struct {
 	err error

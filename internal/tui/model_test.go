@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -400,5 +401,51 @@ func TestShellIgnoresFinishedWithoutPendingCommand(t *testing.T) {
 
 	if strings.Contains(finished.View(), "[exit") {
 		t.Fatalf("stray exit line shown:\n%s", finished.View())
+	}
+}
+
+func TestFooterMessagesExpire(t *testing.T) {
+	model := testModel(t)
+	model.screen = screenCommandRunning
+	model.command.cancel = func() {}
+	withNotice, command := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if withNotice.(Model).notice == "" || command == nil {
+		t.Fatal("expected a notice and an expiry command")
+	}
+
+	cleared, _ := withNotice.Update(clearMessageMsg{generation: withNotice.(Model).messageGeneration})
+
+	if cleared.(Model).notice != "" {
+		t.Fatalf("notice still shown: %q", cleared.(Model).notice)
+	}
+}
+
+func TestStaleClearDoesNotRemoveNewerMessage(t *testing.T) {
+	model := testModel(t)
+	model.screen = screenCommandRunning
+	model.command.cancel = func() {}
+	first, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	staleGeneration := first.(Model).messageGeneration
+	second, _ := first.Update(errorMsg{err: errors.New("newer problem")})
+
+	cleared, _ := second.Update(clearMessageMsg{generation: staleGeneration})
+
+	if cleared.(Model).status != "newer problem" {
+		t.Fatalf("newer message was cleared: %q", cleared.(Model).status)
+	}
+}
+
+func TestSendingShellLineClearsNotice(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	opened.(Model).shells["alpha"].pending = 1
+	noticed, _ := opened.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	typed := pressKey(noticed, "echo hi")
+
+	sent := pressKey(typed, "enter")
+
+	if noticed.(Model).notice == "" || sent.(Model).notice != "" {
+		t.Fatalf("notice before %q after %q", noticed.(Model).notice, sent.(Model).notice)
 	}
 }
