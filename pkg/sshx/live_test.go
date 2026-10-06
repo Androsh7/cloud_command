@@ -127,3 +127,81 @@ func TestLiveRunCommandContextStopsOnCancel(t *testing.T) {
 		t.Fatal("cancelled command did not return promptly")
 	}
 }
+
+// collectUntilFinished drains events until the command with the nonce finishes, returning the output lines.
+func collectUntilFinished(t *testing.T, shell *Shell, nonce string) ([]string, int) {
+	t.Helper()
+	lines := []string{}
+	timeout := time.After(liveTimeout * 3)
+	for {
+		select {
+		case event, open := <-shell.Events():
+			if !open {
+				t.Fatal("shell closed before the command finished")
+			}
+			if event.Finished && event.Nonce == nonce {
+				return lines, event.ExitCode
+			}
+			if event.Text != "" {
+				lines = append(lines, event.Text)
+			}
+		case <-timeout:
+			t.Fatalf("timed out waiting for command %s; got %v", nonce, lines)
+		}
+	}
+}
+
+func TestLiveShellKeepsStateBetweenCommands(t *testing.T) {
+	sshHost := liveHost(t)
+	shell, err := sshHost.OpenShell(context.Background())
+	if err != nil {
+		t.Fatalf("OpenShell returned error: %v", err)
+	}
+	defer shell.Close()
+
+	nonce, err := shell.Run("cd /tmp && export LIVE_SHELL_VALUE=persisted")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	_, exitCode := collectUntilFinished(t, shell, nonce)
+	nonce, _ = shell.Run("pwd; echo $LIVE_SHELL_VALUE; echo to-stderr >&2")
+	lines, secondExitCode := collectUntilFinished(t, shell, nonce)
+
+	if exitCode != 0 || secondExitCode != 0 {
+		t.Fatalf("got exit codes %d and %d", exitCode, secondExitCode)
+	}
+	joined := strings.Join(lines, "\n")
+	for _, expected := range []string{"/tmp", "persisted", "to-stderr"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("output lacks %q:\n%s", expected, joined)
+		}
+	}
+}
+
+func TestLiveShellInterruptStopsForegroundCommand(t *testing.T) {
+	sshHost := liveHost(t)
+	shell, err := sshHost.OpenShell(context.Background())
+	if err != nil {
+		t.Fatalf("OpenShell returned error: %v", err)
+	}
+	defer shell.Close()
+
+	nonce, err := shell.Run("sleep 30")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	time.Sleep(time.Second)
+	if err := shell.Interrupt(); err != nil {
+		t.Fatalf("Interrupt returned error: %v", err)
+	}
+	_, exitCode := collectUntilFinished(t, shell, nonce)
+
+	if exitCode == 0 {
+		t.Fatal("interrupted sleep should not exit with 0")
+	}
+	nonce, _ = shell.Run("echo still-alive")
+	lines, _ := collectUntilFinished(t, shell, nonce)
+	if !strings.Contains(strings.Join(lines, "\n"), "still-alive") {
+		t.Fatalf("shell did not survive the interrupt: %v", lines)
+	}
+}
