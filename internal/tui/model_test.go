@@ -247,3 +247,13 @@ func TestOutputScreenSavesResults(t *testing.T) {
 		t.Fatalf("saved file missing: %v", err)
 	}
 }
+
+func TestEscapeOnAgentsScreenDoesNotQuit(t *testing.T) {
+	model := testModel(t)
+
+	_, command := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if command != nil {
+		t.Fatal("escape on the agents screen should do nothing")
+	}
+}

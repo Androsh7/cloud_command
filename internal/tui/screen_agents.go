@@ -97,7 +97,7 @@ func (state *agentsState) clampCursor() {
 func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	state := &model.agents
 	switch message.String() {
-	case "q", "esc":
+	case "q":
 		return model, tea.Quit
 	case "up", "k":
 		if state.cursor > 0 {
