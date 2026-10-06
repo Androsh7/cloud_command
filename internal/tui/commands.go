@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -86,7 +87,8 @@ func (model Model) startCreation(ctx context.Context, spec agent.Spec, count int
 	reporter := func(name string, step agent.Step) {
 		select {
 		case channel <- createProgressMsg{name: name, step: step}:
-		case <-ctx.Done():
+		default:
+			slog.Warn("dropped creation progress message", "agent", name, "step", step)
 		}
 	}
 	go func() {

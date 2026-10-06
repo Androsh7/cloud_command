@@ -24,8 +24,11 @@ const (
 	StepLaunch      Step = "launching instance"
 	StepWaitRunning Step = "waiting for instance"
 	StepWaitSsh     Step = "waiting for ssh"
+	StepCleanup     Step = "cleaning up"
 	StepDone        Step = "ready"
 )
+
+const cleanupTimeout = 2 * time.Minute
 
 // Spec is what the user supplies to create an agent.
 type Spec struct {
@@ -55,6 +58,7 @@ func (reporter Reporter) report(agentName string, step Step) {
 }
 
 // Create provisions one agent and blocks until it accepts SSH connections.
+// When provisioning fails or the context is cancelled, everything created so far is removed again.
 func Create(ctx context.Context, store *Store, spec Spec, options CreateOptions, reporter Reporter) (*Agent, error) {
 	reporter.report(spec.Name, StepDirectory)
 	directory, err := store.NewAgentDirectory(spec.Name)
@@ -78,10 +82,14 @@ func Create(ctx context.Context, store *Store, spec Spec, options CreateOptions,
 	}
 
 	if err := newAgent.provision(ctx, reporter); err != nil {
-		newAgent.rollback(ctx)
+		newAgent.rollback(reporter)
 		return nil, err
 	}
 	if err := newAgent.WaitUntilReady(ctx, options, reporter); err != nil {
+		if ctx.Err() != nil {
+			newAgent.rollback(reporter)
+			return nil, fmt.Errorf("creation of agent %q cancelled: %w", spec.Name, err)
+		}
 		return newAgent, err
 	}
 	reporter.report(spec.Name, StepDone)
@@ -179,17 +187,16 @@ func (managedAgent *Agent) WaitUntilReady(ctx context.Context, options CreateOpt
 	return nil
 }
 
-// rollback removes what provision created before the instance was launched.
-func (managedAgent *Agent) rollback(ctx context.Context) {
-	if managedAgent.Record.InstanceId != "" {
+// rollback terminates the instance, deletes the key pair and removes the directory, whichever of them exist.
+// It uses its own context so a cancelled creation can still clean up.
+func (managedAgent *Agent) rollback(reporter Reporter) {
+	reporter.report(managedAgent.Name(), StepCleanup)
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer cancel()
+	if err := managedAgent.Destroy(cleanupCtx); err != nil {
+		slog.Warn("rollback left resources behind", "agent", managedAgent.Name(),
+			"instance_id", managedAgent.Record.InstanceId, "key_pair", managedAgent.Record.KeyPairName, "error", err)
 		return
 	}
-	if managedAgent.Record.KeyPairName != "" {
-		if err := ec2.DeleteKeyPair(ctx, managedAgent.Record.Region, managedAgent.Record.KeyPairName); err != nil {
-			slog.Warn("rollback failed to delete key pair", "agent", managedAgent.Name(), "error", err)
-		}
-	}
-	if err := managedAgent.store.Remove(managedAgent.Name()); err != nil {
-		slog.Warn("rollback failed to remove directory", "agent", managedAgent.Name(), "error", err)
-	}
+	slog.Info("rolled back agent", "agent", managedAgent.Name())
 }

@@ -200,7 +200,7 @@ func (model Model) updateCreatingKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return model.leaveCreating()
 		}
 		model.creating.cancel()
-		model.status = "cancelling..."
+		model.status = "cancelling; instances and key pairs created so far are being removed..."
 		return model, nil
 	case "enter":
 		return model.leaveCreating()
@@ -297,6 +297,8 @@ func (model Model) viewCreating() string {
 			builder.WriteString(errorStyle.Render("failed: " + state.errors[name].Error()))
 		case state.steps[name] == agent.StepDone:
 			builder.WriteString(successStyle.Render(string(agent.StepDone)))
+		case state.steps[name] == agent.StepCleanup && state.finished:
+			builder.WriteString(dimStyle.Render("removed"))
 		case state.finished:
 			builder.WriteString(dimStyle.Render("not started"))
 		default:

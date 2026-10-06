@@ -35,6 +35,47 @@ func liveRegion(t *testing.T, ctx context.Context) string {
 	return awsConfig.Region
 }
 
+func TestLiveCancelledCreationCleansUp(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), liveTestTimeout)
+	defer cancel()
+	store := NewStore(t.TempDir())
+	region := liveRegion(t, ctx)
+	spec := Spec{
+		Name: "live-cancel-" + uuid.NewString()[:8], Region: region, InstanceType: liveInstanceType,
+		Architecture: ec2.ArchitectureArm64, SshUser: liveSshUser, SshPort: liveSshPort,
+	}
+	options := CreateOptions{SshTimeout: liveSshTimeout, ReadyTimeout: liveReadyTimeout, PollInterval: livePollInterval}
+	createCtx, cancelCreate := context.WithCancel(ctx)
+	defer cancelCreate()
+	var launched *Agent
+	reporter := func(_ string, step Step) {
+		if step == StepWaitRunning {
+			loaded, err := store.Load(spec.Name)
+			if err == nil {
+				launched = loaded
+			}
+			cancelCreate()
+		}
+	}
+
+	createdAgent, err := Create(createCtx, store, spec, options, reporter)
+
+	if err == nil || createdAgent != nil {
+		t.Fatalf("expected cancellation error without an agent, got %v %v", createdAgent, err)
+	}
+	if launched == nil || launched.Record.InstanceId == "" {
+		t.Fatal("test never observed the launched instance")
+	}
+	if _, err := store.Load(spec.Name); err == nil {
+		t.Fatal("agent directory still exists after cancellation")
+	}
+	info, err := ec2.DescribeInstance(ctx, region, launched.Record.InstanceId)
+	if err != nil || !ec2.IsGoneState(info.State) {
+		t.Fatalf("instance not terminated: %+v %v", info, err)
+	}
+	t.Cleanup(func() { _ = ec2.DeleteKeyPair(context.Background(), region, launched.Record.KeyPairName) })
+}
+
 func TestLiveAgentLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), liveTestTimeout)
 	defer cancel()
