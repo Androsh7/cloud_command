@@ -1,0 +1,65 @@
+name: Build
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NFPM_VERSION: v2.47.0
+  GO_WINRES_VERSION: v0.3.3
+
+jobs:
+  linux:
+    name: Linux binary and packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install nfpm
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build the binary and the deb, rpm, apk and archlinux packages
+        run: make build-linux-packages
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cloud-command-linux
+          path: dist/linux/
+          if-no-files-found: error
+
+  windows:
+    name: Windows binary and installer
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install go-winres
+        run: |
+          go install github.com/tc-hib/go-winres@${GO_WINRES_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress --yes
+          echo "C:\Program Files (x86)\Inno Setup 6" >> "$GITHUB_PATH"
+      - name: Build the binary and the installer
+        run: make build-windows-installer
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cloud-command-windows
+          path: dist/windows/
+          if-no-files-found: error
