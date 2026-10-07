@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
+
 	"github.com/androsh7/cloud_command/pkg/ec2"
 	"github.com/androsh7/cloud_command/pkg/sshx"
 )
@@ -17,6 +19,8 @@ import (
 const (
 	KeyPairNamePrefix = "ssh-key-"
 	MaxNameLength     = 63
+
+	recordLockFileName = "agent.lock"
 )
 
 var (
@@ -73,11 +77,64 @@ func (managedAgent *Agent) SetSshOptions(options SshOptions) {
 	managedAgent.host = nil
 }
 
+// lockRecord takes the lock that serialises writes to the record, both inside this process and across processes.
+// The caller runs the returned function to release it.
+func (managedAgent *Agent) lockRecord() (func(), error) {
+	managedAgent.saveLock.Lock()
+	fileLock := flock.New(filepath.Join(managedAgent.Directory, recordLockFileName))
+	if err := fileLock.Lock(); err != nil {
+		managedAgent.saveLock.Unlock()
+		return nil, fmt.Errorf("locking record of agent %q: %w", managedAgent.Name(), err)
+	}
+	return func() {
+		_ = fileLock.Unlock()
+		managedAgent.saveLock.Unlock()
+	}, nil
+}
+
 // Save persists the record.
 func (managedAgent *Agent) Save() error {
+	unlock, err := managedAgent.lockRecord()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return managedAgent.store.Save(managedAgent)
+}
+
+// updateStored re-reads the record from disk, applies a change to it and saves it, all under the record lock,
+// so a change another process saved since this agent was loaded is kept.
+func (managedAgent *Agent) updateStored(change func(record *Record) error) error {
+	unlock, err := managedAgent.lockRecord()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	stored, err := managedAgent.store.Load(managedAgent.Name())
+	if err != nil {
+		return err
+	}
+	record := stored.Record
+	if err := change(&record); err != nil {
+		return err
+	}
+	managedAgent.Record = record
+	return managedAgent.store.Save(managedAgent)
+}
+
+// Reload replaces the in-memory record with the one on disk. An agent that has no store is left unchanged.
+func (managedAgent *Agent) Reload() error {
+	if managedAgent.store == nil {
+		return nil
+	}
 	managedAgent.saveLock.Lock()
 	defer managedAgent.saveLock.Unlock()
-	return managedAgent.store.Save(managedAgent)
+	stored, err := managedAgent.store.Load(managedAgent.Name())
+	if err != nil {
+		return err
+	}
+	managedAgent.Record = stored.Record
+	return nil
 }
 
 // SshHost returns the reusable SSH connection for the agent's current public address.
@@ -113,8 +170,11 @@ func (managedAgent *Agent) Refresh(ctx context.Context) (ec2.InstanceInfo, error
 		return ec2.InstanceInfo{}, err
 	}
 	if info.PublicIp != managedAgent.Record.PublicIp {
-		managedAgent.Record.PublicIp = info.PublicIp
-		if err := managedAgent.Save(); err != nil {
+		err := managedAgent.updateStored(func(record *Record) error {
+			record.PublicIp = info.PublicIp
+			return nil
+		})
+		if err != nil {
 			return info, err
 		}
 	}

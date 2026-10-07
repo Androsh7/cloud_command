@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/androsh7/cloud_command/internal/control"
 	"github.com/androsh7/cloud_command/pkg/agent"
 	"github.com/androsh7/cloud_command/pkg/ec2"
 	"github.com/androsh7/cloud_command/pkg/history"
@@ -25,15 +26,6 @@ func waitFor(channel <-chan tea.Msg) tea.Cmd {
 			return nil
 		}
 		return message
-	}
-}
-
-// createOptions builds the timeouts from the settings.
-func (model Model) createOptions() agent.CreateOptions {
-	return agent.CreateOptions{
-		SshTimeout:   model.deps.Settings.SshTimeout,
-		ReadyTimeout: model.deps.Settings.ReadyTimeout,
-		PollInterval: model.deps.Settings.PollInterval,
 	}
 }
 
@@ -76,8 +68,9 @@ func (model Model) refreshAgents() tea.Cmd {
 func (model Model) scanDetached() tea.Cmd {
 	ctx := model.ctx
 	threads := model.deps.Settings.RegionSearchThreads
+	homeRegion := model.deps.Settings.Region
 	return func() tea.Msg {
-		detached, err := ec2.ListAllEc2s(ctx, ec2.AgentTypeTagValue, threads)
+		detached, err := ec2.ListAllEc2s(ctx, homeRegion, ec2.AgentTypeTagValue, threads)
 		return detachedLoadedMsg{detached: detached, err: err}
 	}
 }
@@ -85,7 +78,7 @@ func (model Model) scanDetached() tea.Cmd {
 // startCreation launches agent creation in the background and streams progress through a channel.
 func (model Model) startCreation(ctx context.Context, spec agent.Spec, count int) (<-chan tea.Msg, tea.Cmd) {
 	store := model.deps.Store
-	options := model.createOptions()
+	options := control.CreateOptions(model.deps.Settings)
 	channel := make(chan tea.Msg, 64)
 	reporter := func(name string, step agent.Step) {
 		select {
@@ -148,7 +141,7 @@ func loadJobDetail(ctx context.Context, target *agent.Agent, job agent.Job, gene
 		if err != nil {
 			return jobDetailMsg{generation: generation, err: err}
 		}
-		stdout, stderr, err := target.JobOutput(ctx, job)
+		stdout, stderr, err := target.JobOutput(ctx, job, jobOutputLines)
 		return jobDetailMsg{generation: generation, status: status, stdout: stdout, stderr: stderr, err: err}
 	}
 }

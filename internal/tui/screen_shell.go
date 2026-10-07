@@ -20,6 +20,7 @@ const (
 	maxShellHistory    = 200
 	shellInputPrompt   = "$ "
 	shellEventBuffer   = 1024
+	maxShellEventBatch = 512
 	shellChromeHeight  = 4
 	shellStatusOpening = "connecting"
 	shellStatusRunning = "running"
@@ -184,6 +185,7 @@ func (model *Model) ensureShellOpen(host *hostShell) tea.Cmd {
 	host.opening = true
 	host.err = nil
 	host.pending = 0
+	host.pendingIds = nil
 	rows, columns := model.terminalSize()
 	return openShellOn(model.ctx, host.agent, model.shellEvents, rows, columns)
 }
@@ -515,30 +517,76 @@ func (model Model) applyShellOpened(message shellOpenedMsg) (tea.Model, tea.Cmd)
 	return model, nil
 }
 
-// applyShellEvent appends streamed output and tracks command completion, then waits for the next event.
+// waitForShellEvents returns a command that delivers the next shell event together with any others already queued,
+// so a burst of output is rendered once instead of once per line.
+func waitForShellEvents(channel <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		first, open := <-channel
+		if !open {
+			return nil
+		}
+		batch := shellEventsMsg{}
+		for message := first; ; {
+			if event, isEvent := message.(shellEventMsg); isEvent {
+				batch.events = append(batch.events, event)
+			}
+			if len(batch.events) >= maxShellEventBatch {
+				return batch
+			}
+			select {
+			case next, open := <-channel:
+				if !open {
+					return batch
+				}
+				message = next
+			default:
+				return batch
+			}
+		}
+	}
+}
+
+// applyShellEvents applies a batch of shell events, redraws the view once, then waits for the next batch.
+func (model Model) applyShellEvents(message shellEventsMsg) (tea.Model, tea.Cmd) {
+	follow := model.shell.viewport.AtBottom()
+	changed := false
+	for _, event := range message.events {
+		changed = model.recordShellEvent(event) || changed
+	}
+	if changed {
+		model.refreshShellView(follow)
+	}
+	return model, waitForShellEvents(model.shellEvents)
+}
+
+// applyShellEvent applies one shell event and redraws the view.
 func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
-	next := waitFor(model.shellEvents)
+	follow := model.shell.viewport.AtBottom()
+	if model.recordShellEvent(message) {
+		model.refreshShellView(follow)
+	}
+	return model, nil
+}
+
+// recordShellEvent stores streamed output and tracks command completion, reporting whether the visible lines changed.
+func (model *Model) recordShellEvent(message shellEventMsg) bool {
 	host, found := model.shells[message.agentName]
 	if !found {
-		return model, next
+		return false
 	}
 	event := message.event
+	var line shellLine
 	switch {
 	case event.Closed:
 		host.pending = 0
+		host.pendingIds = nil
 		if event.Err != nil {
 			host.err = event.Err
 		}
-		closedLine := shellLine{agentName: message.agentName, text: "[shell closed]", isInput: true}
-		host.record(closedLine)
-		if model.isShellTarget(message.agentName) {
-			follow := model.shell.viewport.AtBottom()
-			model.appendShellLine(closedLine)
-			model.refreshShellView(follow)
-		}
+		line = shellLine{agentName: message.agentName, text: "[shell closed]", isInput: true}
 	case event.Finished:
 		if host.pending == 0 {
-			return model, next
+			return false
 		}
 		host.pending--
 		if len(host.pendingIds) > 0 {
@@ -547,23 +595,16 @@ func (model Model) applyShellEvent(message shellEventMsg) (tea.Model, tea.Cmd) {
 		}
 		host.lastExit = event.ExitCode
 		host.hasExit = true
-		statusLine := shellLine{agentName: message.agentName, text: fmt.Sprintf("[exit %d]", event.ExitCode), isStatus: true}
-		host.record(statusLine)
-		if model.isShellTarget(message.agentName) {
-			follow := model.shell.viewport.AtBottom()
-			model.appendShellLine(statusLine)
-			model.refreshShellView(follow)
-		}
+		line = shellLine{agentName: message.agentName, text: fmt.Sprintf("[exit %d]", event.ExitCode), isStatus: true}
 	default:
-		outputLine := shellLine{agentName: message.agentName, text: event.Text, stream: event.Stream}
-		host.record(outputLine)
-		if model.isShellTarget(message.agentName) {
-			follow := model.shell.viewport.AtBottom()
-			model.appendShellLine(outputLine)
-			model.refreshShellView(follow)
-		}
+		line = shellLine{agentName: message.agentName, text: event.Text, stream: event.Stream}
 	}
-	return model, next
+	host.record(line)
+	if !model.isShellTarget(message.agentName) {
+		return false
+	}
+	model.appendShellLine(line)
+	return true
 }
 
 // viewShell renders the shell screen.

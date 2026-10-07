@@ -13,6 +13,7 @@ import (
 
 const (
 	scriptPreviewLength = 40
+	jobOutputLines      = 2000
 	timestampLayout     = "2006-01-02 15:04:05"
 )
 
@@ -39,9 +40,9 @@ type jobDetailState struct {
 // openJobs switches to the jobs list and loads each job's status.
 func (model Model) openJobs(target *agent.Agent) (tea.Model, tea.Cmd) {
 	model.detail.agent = target
+	model.setStatus(target.Reload())
 	model.jobs = jobsState{summaries: map[string]string{}, loading: len(target.Record.Jobs) > 0}
 	model.screen = screenJobs
-	model.setStatus(nil)
 	if !model.jobs.loading {
 		return model, nil
 	}
@@ -133,6 +134,9 @@ func (model Model) applyJobAction(message jobActionMsg) (tea.Model, tea.Cmd) {
 	if model.detail.agent == nil {
 		model.screen = screenAgents
 		return model, nil
+	}
+	if err := model.detail.agent.Reload(); err != nil && message.err == nil {
+		model.setStatus(err)
 	}
 	if model.jobs.cursor >= len(model.detail.agent.Record.Jobs) {
 		model.jobs.cursor = max(len(model.detail.agent.Record.Jobs)-1, 0)

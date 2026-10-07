@@ -540,6 +540,38 @@ func TestShellLineIsRecordedWithExitCode(t *testing.T) {
 	}
 }
 
+func TestShellClosingDropsUnfinishedHistoryIds(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+	host := opened.(Model).shells["alpha"]
+	host.pending = 1
+	host.pendingIds = []string{"entry-for-exit"}
+
+	closed, _ := opened.Update(shellEventMsg{agentName: "alpha", event: sshx.ShellEvent{Closed: true}})
+
+	remaining := closed.(Model).shells["alpha"]
+	if remaining.pending != 0 || len(remaining.pendingIds) != 0 {
+		t.Fatalf("pending=%d pendingIds=%v, want none", remaining.pending, remaining.pendingIds)
+	}
+}
+
+func TestShellEventBatchShowsEveryLine(t *testing.T) {
+	model := testModel(t)
+	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}
+	opened, _ := model.openShell([]*agent.Agent{target}, screenAgents)
+
+	updated, _ := opened.Update(shellEventsMsg{events: []shellEventMsg{
+		{agentName: "alpha", event: sshx.ShellEvent{Text: "first-line"}},
+		{agentName: "alpha", event: sshx.ShellEvent{Text: "second-line"}},
+	}})
+
+	view := updated.View()
+	if !strings.Contains(view, "first-line") || !strings.Contains(view, "second-line") {
+		t.Fatalf("batched lines missing:\n%s", view)
+	}
+}
+
 func TestJobDetailShowsFullScript(t *testing.T) {
 	model := testModel(t)
 	target := &agent.Agent{Record: agent.Record{Name: "alpha", PublicIp: "203.0.113.5"}}

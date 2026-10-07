@@ -50,6 +50,11 @@ type shellEventMsg struct {
 	event     sshx.ShellEvent
 }
 
+// shellEventsMsg carries every shell event that was queued when the interface was ready for more.
+type shellEventsMsg struct {
+	events []shellEventMsg
+}
+
 // jobStartedMsg reports a newly started persistent job.
 type jobStartedMsg struct {
 	agentName string

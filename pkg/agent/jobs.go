@@ -58,8 +58,11 @@ func (managedAgent *Agent) StartJob(ctx context.Context, command sshx.Command) (
 		return Job{}, fmt.Errorf("starting job on agent %q failed with exit code %d: %s",
 			managedAgent.Name(), response.ReturnCode, strings.TrimSpace(response.Stderr))
 	}
-	managedAgent.Record.Jobs = append(managedAgent.Record.Jobs, job)
-	if err := managedAgent.Save(); err != nil {
+	err = managedAgent.updateStored(func(record *Record) error {
+		record.Jobs = append(record.Jobs, job)
+		return nil
+	})
+	if err != nil {
 		return Job{}, err
 	}
 	slog.Info("started job", "agent", managedAgent.Name(), "job", job.Id, "unit", spec.UnitName())
@@ -79,13 +82,13 @@ func (managedAgent *Agent) JobStatus(ctx context.Context, job Job) (systemd.Unit
 	return status, nil
 }
 
-// JobOutput returns the standard output and standard error captured so far.
-func (managedAgent *Agent) JobOutput(ctx context.Context, job Job) (string, string, error) {
-	stdoutResponse, err := managedAgent.runRaw(ctx, systemd.ReadOutputCommand(job.StdoutPath))
+// JobOutput returns the last lines of the standard output and standard error captured so far.
+func (managedAgent *Agent) JobOutput(ctx context.Context, job Job, lines int) (string, string, error) {
+	stdoutResponse, err := managedAgent.runRaw(ctx, systemd.ReadOutputCommand(job.StdoutPath, lines))
 	if err != nil {
 		return "", "", err
 	}
-	stderrResponse, err := managedAgent.runRaw(ctx, systemd.ReadOutputCommand(job.StderrPath))
+	stderrResponse, err := managedAgent.runRaw(ctx, systemd.ReadOutputCommand(job.StderrPath, lines))
 	if err != nil {
 		return "", "", err
 	}
@@ -120,18 +123,20 @@ func (managedAgent *Agent) RemoveJob(ctx context.Context, job Job) error {
 
 // ForgetJob drops a job from the record without touching the remote host.
 func (managedAgent *Agent) ForgetJob(job Job) error {
-	remaining := make([]Job, 0, len(managedAgent.Record.Jobs))
-	found := false
-	for _, storedJob := range managedAgent.Record.Jobs {
-		if storedJob.Id == job.Id {
-			found = true
-			continue
+	return managedAgent.updateStored(func(record *Record) error {
+		remaining := make([]Job, 0, len(record.Jobs))
+		found := false
+		for _, storedJob := range record.Jobs {
+			if storedJob.Id == job.Id {
+				found = true
+				continue
+			}
+			remaining = append(remaining, storedJob)
 		}
-		remaining = append(remaining, storedJob)
-	}
-	if !found {
-		return fmt.Errorf("%w: %q on agent %q", ErrJobNotFound, job.Id, managedAgent.Name())
-	}
-	managedAgent.Record.Jobs = remaining
-	return managedAgent.Save()
+		if !found {
+			return fmt.Errorf("%w: %q on agent %q", ErrJobNotFound, job.Id, managedAgent.Name())
+		}
+		record.Jobs = remaining
+		return nil
+	})
 }

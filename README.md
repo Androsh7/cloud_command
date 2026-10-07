@@ -124,7 +124,7 @@ cloud-command jobs remove <agent> <job-id>
 | `stop_job` | Stop a job, keeping its record |
 | `remove_job` | Stop a job, delete its output and forget it |
 
-In `mcp` mode stdout carries the protocol, so nothing else is written there; logs go to `~/.cloud-command/cloud-command.log`. The TUI, the command line and the MCP server may run at the same time against the same directory. Each operation reloads the agent record before changing it and writes it atomically, but two processes changing the same agent's jobs in the same instant can still lose one record.
+In `mcp` mode stdout carries the protocol, so nothing else is written there; logs go to `~/.cloud-command/cloud-command.log`. The TUI, the command line and the MCP server may run at the same time against the same directory. Each change to an agent's jobs or to the history re-reads the file and writes it back under a lock file (`agent.lock`, `history.toml.lock`), so changes made by another process are kept.
 
 ## Tests
 

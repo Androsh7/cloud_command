@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/androsh7/cloud_command/internal/control"
 	"github.com/androsh7/cloud_command/pkg/agent"
-	"github.com/androsh7/cloud_command/pkg/ec2"
 )
 
 const (
@@ -22,7 +22,6 @@ const (
 	fieldCount
 	fieldTotal
 
-	maxBatchCount  = 50
 	fieldWidth     = 40
 	fieldLabelSize = 14
 )
@@ -157,34 +156,25 @@ func (model Model) updateCreateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 // submitCreate validates the form and starts creation.
 func (model Model) submitCreate() (tea.Model, tea.Cmd) {
 	state := model.create
-	spec := agent.Spec{
-		Name:         strings.TrimSpace(state.inputs[fieldName].Value()),
-		Region:       strings.TrimSpace(state.inputs[fieldRegion].Value()),
-		InstanceType: strings.TrimSpace(state.inputs[fieldInstanceType].Value()),
-		Architecture: ec2.Architecture(strings.TrimSpace(state.inputs[fieldArchitecture].Value())),
-		SshUser:      model.deps.Settings.SshUser,
-		SshPort:      model.deps.Settings.SshPort,
+	request := control.CreateRequest{
+		Name:         state.inputs[fieldName].Value(),
+		Region:       state.inputs[fieldRegion].Value(),
+		InstanceType: state.inputs[fieldInstanceType].Value(),
+		Architecture: strings.TrimSpace(state.inputs[fieldArchitecture].Value()),
+		Count:        1,
 	}
-	if err := agent.ValidateName(spec.Name); err != nil {
-		model.setStatus(err)
-		return model, nil
-	}
-	if spec.Region == "" || spec.InstanceType == "" {
-		model.setStatus(fmt.Errorf("region and instance type are required"))
-		return model, nil
-	}
-	if spec.Architecture != ec2.ArchitectureX86_64 && spec.Architecture != ec2.ArchitectureArm64 {
-		model.setStatus(fmt.Errorf("architecture must be %s or %s", ec2.ArchitectureX86_64, ec2.ArchitectureArm64))
-		return model, nil
-	}
-	count := 1
 	if state.batch {
 		parsedCount, err := strconv.Atoi(strings.TrimSpace(state.inputs[fieldCount].Value()))
-		if err != nil || parsedCount < 1 || parsedCount > maxBatchCount {
-			model.setStatus(fmt.Errorf("count must be a number between 1 and %d", maxBatchCount))
+		if err != nil || parsedCount < 1 {
+			model.setStatus(fmt.Errorf("count must be a number between 1 and %d", control.MaxBatchCount))
 			return model, nil
 		}
-		count = parsedCount
+		request.Count = parsedCount
+	}
+	spec, count, err := control.ResolveSpec(model.deps.Settings, request)
+	if err != nil {
+		model.setStatus(err)
+		return model, nil
 	}
 
 	names := []string{spec.Name}

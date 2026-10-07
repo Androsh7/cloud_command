@@ -12,9 +12,17 @@ func TestRunCommandBuildsSystemdRunLine(t *testing.T) {
 
 	expected := "sudo systemd-run --unit=job-abc -p RemainAfterExit=yes" +
 		" -p StandardOutput=file:/tmp/job-abc.stdout -p StandardError=file:/tmp/job-abc.stderr" +
-		" -p User=ec2-user -- /bin/bash -c 'echo ZWNobyBoaQ== | base64 -d | /bin/bash'"
+		" -p User=ec2-user -- /bin/bash -c 'exec /bin/bash <(echo ZWNobyBoaQ== | base64 -d)'"
 	if line != expected {
 		t.Fatalf("got\n%s\nwant\n%s", line, expected)
+	}
+}
+
+func TestReadOutputCommandTailsTheFile(t *testing.T) {
+	line := ReadOutputCommand("/tmp/job-abc.stdout", 50)
+
+	if line != "tail -c 4194304 /tmp/job-abc.stdout 2>/dev/null | tail -n 50" {
+		t.Fatalf("got %q", line)
 	}
 }
 

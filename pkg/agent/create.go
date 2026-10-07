@@ -148,7 +148,7 @@ func (managedAgent *Agent) provision(ctx context.Context, reporter Reporter) err
 	if err != nil {
 		return err
 	}
-	subnetId, err := ec2.GetVpcSubnetId(ctx, region, vpcId)
+	subnetId, err := ec2.GetVpcSubnetId(ctx, region, vpcId, managedAgent.Record.InstanceType)
 	if err != nil {
 		return err
 	}

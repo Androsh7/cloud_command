@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gofrs/flock"
 	"github.com/google/uuid"
 )
 
@@ -18,6 +19,7 @@ const (
 	MaxEntries      = 2000
 	filePermissions = 0o600
 	temporarySuffix = ".tmp"
+	lockSuffix      = ".lock"
 )
 
 // Kind says whether an entry was a one-shot command or a persistent job.
@@ -69,10 +71,28 @@ func NewStore(path string) *Store {
 	return &Store{Path: path}
 }
 
+// lockFile takes the lock that serialises access to the history file, both inside this process and across processes.
+// The caller runs the returned function to release it.
+func (store *Store) lockFile() (func(), error) {
+	store.lock.Lock()
+	fileLock := flock.New(store.Path + lockSuffix)
+	if err := fileLock.Lock(); err != nil {
+		store.lock.Unlock()
+		return nil, fmt.Errorf("locking history %q: %w", store.Path, err)
+	}
+	return func() {
+		_ = fileLock.Unlock()
+		store.lock.Unlock()
+	}, nil
+}
+
 // Record appends an entry, filling its id and time when they are empty, and returns it.
 func (store *Store) Record(entry Entry) (Entry, error) {
-	store.lock.Lock()
-	defer store.lock.Unlock()
+	unlock, err := store.lockFile()
+	if err != nil {
+		return Entry{}, err
+	}
+	defer unlock()
 	if entry.Id == "" {
 		entry.Id = uuid.NewString()
 	}
@@ -92,8 +112,11 @@ func (store *Store) Record(entry Entry) (Entry, error) {
 
 // SetResult stores the exit code, or the error, of an earlier entry.
 func (store *Store) SetResult(id string, exitCode *int, failure string) error {
-	store.lock.Lock()
-	defer store.lock.Unlock()
+	unlock, err := store.lockFile()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	entries, err := store.read()
 	if err != nil {
 		return err
@@ -110,8 +133,11 @@ func (store *Store) SetResult(id string, exitCode *int, failure string) error {
 
 // List returns every entry, newest first.
 func (store *Store) List() ([]Entry, error) {
-	store.lock.Lock()
-	defer store.lock.Unlock()
+	unlock, err := store.lockFile()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	entries, err := store.read()
 	if err != nil {
 		return nil, err

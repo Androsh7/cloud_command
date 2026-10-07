@@ -15,11 +15,12 @@ import (
 	"github.com/androsh7/cloud_command/pkg/ec2"
 	"github.com/androsh7/cloud_command/pkg/history"
 	"github.com/androsh7/cloud_command/pkg/sshx"
+	"github.com/androsh7/cloud_command/pkg/systemd"
 )
 
 const (
 	DefaultCommandTimeout = 2 * time.Minute
-	DefaultOutputLines    = 200
+	DefaultOutputLines    = systemd.DefaultOutputLines
 	MaxBatchCount         = 50
 	stateUnknown          = "unknown"
 	stateIncomplete       = "incomplete"
@@ -151,12 +152,12 @@ func (controller *Controller) finish(entry history.Entry, exitCode *int, failure
 	}
 }
 
-// createOptions builds the timeouts from the settings.
-func (controller *Controller) createOptions() agent.CreateOptions {
+// CreateOptions builds the creation timeouts from the settings.
+func CreateOptions(settings config.Settings) agent.CreateOptions {
 	return agent.CreateOptions{
-		SshTimeout:   controller.Settings.SshTimeout,
-		ReadyTimeout: controller.Settings.ReadyTimeout,
-		PollInterval: controller.Settings.PollInterval,
+		SshTimeout:   settings.SshTimeout,
+		ReadyTimeout: settings.ReadyTimeout,
+		PollInterval: settings.PollInterval,
 	}
 }
 
@@ -225,7 +226,7 @@ func (controller *Controller) ListAgents(ctx context.Context, includeDetached bo
 		for _, loaded := range agents {
 			known[loaded.Record.InstanceId] = true
 		}
-		found, err := ec2.ListAllEc2s(ctx, ec2.AgentTypeTagValue, controller.Settings.RegionSearchThreads)
+		found, err := ec2.ListAllEc2s(ctx, controller.Settings.Region, ec2.AgentTypeTagValue, controller.Settings.RegionSearchThreads)
 		if err != nil {
 			return summaries, nil, fmt.Errorf("scanning regions: %w", err)
 		}
@@ -244,6 +245,7 @@ func (controller *Controller) GetAgent(ctx context.Context, name string) (AgentD
 	if err != nil {
 		return AgentDetail{}, err
 	}
+	defer loaded.Disconnect()
 	detail := AgentDetail{AgentSummary: summarize(loaded, refreshState(ctx, loaded)), Jobs: []JobSummary{}}
 	if loaded.Record.PublicIp != "" {
 		detail.SshCommand = fmt.Sprintf("ssh -i %s -p %d %s@%s", loaded.PrivateKeyPath(), loaded.Record.SshPort, loaded.Record.SshUser, loaded.Record.PublicIp)
@@ -260,9 +262,13 @@ func (controller *Controller) GetAgent(ctx context.Context, name string) (AgentD
 	return detail, nil
 }
 
-// resolveSpec fills a request from the settings and validates it.
+// resolveSpec fills a request from the controller's settings and validates it.
 func (controller *Controller) resolveSpec(request CreateRequest) (agent.Spec, int, error) {
-	settings := controller.Settings
+	return ResolveSpec(controller.Settings, request)
+}
+
+// ResolveSpec fills a request from the settings and validates it, returning the spec and how many agents to create.
+func ResolveSpec(settings config.Settings, request CreateRequest) (agent.Spec, int, error) {
 	spec := agent.Spec{
 		Name:         strings.TrimSpace(request.Name),
 		Region:       firstNonEmpty(request.Region, settings.Region),
@@ -307,7 +313,7 @@ func (controller *Controller) CreateAgents(ctx context.Context, request CreateRe
 	if count > 1 {
 		names = agent.BatchNames(spec.Name, count)
 	}
-	options := controller.createOptions()
+	options := CreateOptions(controller.Settings)
 	results := make([]CreateResult, len(names))
 	var waitGroup sync.WaitGroup
 	for index, name := range names {
@@ -338,7 +344,6 @@ func describeCreate(ctx context.Context, name string, created *agent.Agent, err 
 	}
 	if created != nil {
 		result.InstanceId = created.Record.InstanceId
-		result.PublicIp = created.Record.PublicIp
 		result.State = refreshState(ctx, created)
 		result.PublicIp = created.Record.PublicIp
 	}
@@ -467,12 +472,12 @@ func (controller *Controller) JobStatus(ctx context.Context, name string, jobId 
 	if err != nil {
 		return JobOutput{}, err
 	}
-	stdout, stderr, err := loaded.JobOutput(ctx, job)
-	if err != nil {
-		return JobOutput{}, err
-	}
 	if outputLines <= 0 {
 		outputLines = DefaultOutputLines
+	}
+	stdout, stderr, err := loaded.JobOutput(ctx, job, outputLines)
+	if err != nil {
+		return JobOutput{}, err
 	}
 	return JobOutput{
 		Agent:    name,

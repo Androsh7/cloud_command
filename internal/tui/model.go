@@ -110,8 +110,7 @@ func New(ctx context.Context, deps Dependencies) Model {
 
 // Init starts the spinner and the first agent refresh.
 func (model Model) Init() tea.Cmd {
-	model.agents.refreshing = true
-	return tea.Batch(model.spinner.Tick, model.refreshAgents(), model.scanDetached(), waitFor(model.shellEvents))
+	return tea.Batch(model.spinner.Tick, model.refreshAgents(), model.scanDetached(), waitForShellEvents(model.shellEvents))
 }
 
 // Update applies one message to the model.
@@ -204,6 +203,8 @@ func (model Model) handleData(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model.applyShellOpened(message)
 	case shellEventMsg:
 		return model.applyShellEvent(message)
+	case shellEventsMsg:
+		return model.applyShellEvents(message)
 	case jobStartedMsg:
 		return model.applyJobStarted(message)
 	case jobStatusesMsg:

@@ -12,6 +12,7 @@ import (
 
 	"github.com/androsh7/cloud_command/pkg/ec2"
 	"github.com/androsh7/cloud_command/pkg/sshx"
+	"github.com/androsh7/cloud_command/pkg/systemd"
 )
 
 const (
@@ -147,7 +148,7 @@ func TestLiveAgentLifecycle(t *testing.T) {
 	if status.Summary() != "exited (0)" {
 		t.Fatalf("job finished with %q", status.Summary())
 	}
-	stdout, _, err := createdAgent.JobOutput(ctx, job)
+	stdout, _, err := createdAgent.JobOutput(ctx, job, systemd.DefaultOutputLines)
 	if err != nil || !strings.Contains(stdout, "done") {
 		t.Fatalf("job output missing: %q %v", stdout, err)
 	}

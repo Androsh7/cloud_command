@@ -15,6 +15,9 @@ const (
 	DefaultExecutable = "/bin/bash"
 	RootUser          = "root"
 
+	DefaultOutputLines = 200
+	MaxOutputBytes     = 4 * 1024 * 1024
+
 	LoadStateNotFound = "not-found"
 	ActiveStateActive = "active"
 	ActiveStateFailed = "failed"
@@ -48,6 +51,7 @@ func (spec JobSpec) StderrPath() string {
 }
 
 // RunCommand returns the systemd-run command line that starts the job.
+// The script reaches the executable as a file, so commands in it that read standard input cannot consume the rest of it.
 func (spec JobSpec) RunCommand() string {
 	executable := spec.Executable
 	if executable == "" {
@@ -55,8 +59,8 @@ func (spec JobSpec) RunCommand() string {
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(spec.Script))
 	return fmt.Sprintf(
-		"sudo systemd-run --unit=%s -p RemainAfterExit=yes -p StandardOutput=file:%s -p StandardError=file:%s -p User=%s -- %s -c 'echo %s | base64 -d | %s'",
-		spec.UnitName(), spec.StdoutPath(), spec.StderrPath(), spec.User, executable, encoded, executable,
+		"sudo systemd-run --unit=%s -p RemainAfterExit=yes -p StandardOutput=file:%s -p StandardError=file:%s -p User=%s -- %s -c 'exec %s <(echo %s | base64 -d)'",
+		spec.UnitName(), spec.StdoutPath(), spec.StderrPath(), spec.User, DefaultExecutable, executable, encoded,
 	)
 }
 
@@ -65,9 +69,13 @@ func ShowCommand(unitName string) string {
 	return "systemctl show --property=LoadState,ActiveState,SubState,ExecMainStatus,ExecMainStartTimestamp " + unitName
 }
 
-// ReadOutputCommand returns the command that prints one output file, or nothing when it is missing.
-func ReadOutputCommand(path string) string {
-	return "cat " + path + " 2>/dev/null"
+// ReadOutputCommand returns the command that prints the last lines of one output file, or nothing when it is missing.
+// The output is also capped in bytes so a file with very long lines cannot be downloaded whole.
+func ReadOutputCommand(path string, lines int) string {
+	if lines <= 0 {
+		lines = DefaultOutputLines
+	}
+	return fmt.Sprintf("tail -c %d %s 2>/dev/null | tail -n %d", MaxOutputBytes, path, lines)
 }
 
 // StopCommand returns the command that stops the unit.

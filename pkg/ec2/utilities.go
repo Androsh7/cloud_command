@@ -25,6 +25,9 @@ const (
 	SshPort                       = 22
 	AnyIpv4Cidr                   = "0.0.0.0/0"
 	DuplicateGroupErrorCode       = "InvalidGroup.Duplicate"
+	DuplicatePermissionErrorCode  = "InvalidPermission.Duplicate"
+	tcpProtocol                   = "tcp"
+	allProtocols                  = "-1"
 	amazonLinuxAmiParameterFormat = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-%s"
 )
 
@@ -45,10 +48,9 @@ type DetachedAgent struct {
 }
 
 var (
-	awsConfigCache   sync.Map // region -> aws.Config
-	regionsOnce      sync.Once
-	cachedRegions    []string
-	cachedRegionsErr error
+	awsConfigCache sync.Map // region -> aws.Config
+	regionsLock    sync.Mutex
+	cachedRegions  []string
 )
 
 // GetAwsConfig returns a cached AWS config for one region. An empty region uses the default region.
@@ -86,27 +88,29 @@ func GetSsmClient(ctx context.Context, region string) (*ssm.Client, error) {
 	return ssm.NewFromConfig(awsConfig), nil
 }
 
-// GetEc2Regions returns every AWS region that offers EC2, sorted by name. The result is cached.
-func GetEc2Regions(ctx context.Context) ([]string, error) {
-	regionsOnce.Do(func() {
-		client, err := GetEc2Client(ctx, "")
-		if err != nil {
-			cachedRegionsErr = err
-			return
-		}
-		output, err := client.DescribeRegions(ctx, &ec2.DescribeRegionsInput{})
-		if err != nil {
-			cachedRegionsErr = fmt.Errorf("describing regions: %w", err)
-			return
-		}
-		names := make([]string, 0, len(output.Regions))
-		for _, region := range output.Regions {
-			names = append(names, aws.ToString(region.RegionName))
-		}
-		sort.Strings(names)
-		cachedRegions = names
-	})
-	return cachedRegions, cachedRegionsErr
+// GetEc2Regions returns every AWS region that offers EC2, sorted by name, asking the given region for the list.
+// An empty region uses the default region. A successful result is cached; a failure is retried on the next call.
+func GetEc2Regions(ctx context.Context, region string) ([]string, error) {
+	regionsLock.Lock()
+	defer regionsLock.Unlock()
+	if cachedRegions != nil {
+		return cachedRegions, nil
+	}
+	client, err := GetEc2Client(ctx, region)
+	if err != nil {
+		return nil, err
+	}
+	output, err := client.DescribeRegions(ctx, &ec2.DescribeRegionsInput{})
+	if err != nil {
+		return nil, fmt.Errorf("describing regions: %w", err)
+	}
+	names := make([]string, 0, len(output.Regions))
+	for _, described := range output.Regions {
+		names = append(names, aws.ToString(described.RegionName))
+	}
+	sort.Strings(names)
+	cachedRegions = names
+	return cachedRegions, nil
 }
 
 // IsGoneState reports whether an instance state means the instance is terminated or on its way there.
@@ -152,9 +156,10 @@ func FindEc2InRegion(ctx context.Context, region string, nameTag string) ([]Deta
 }
 
 // ListAllEc2s returns every non-terminated instance across all regions carrying the given Type tag.
+// homeRegion is the region asked for the list of regions; an empty one uses the default region.
 // searchThreads limits how many regions are searched at once; zero searches them all at once.
-func ListAllEc2s(ctx context.Context, nameTag string, searchThreads int) ([]DetachedAgent, error) {
-	regions, err := GetEc2Regions(ctx)
+func ListAllEc2s(ctx context.Context, homeRegion string, nameTag string, searchThreads int) ([]DetachedAgent, error) {
+	regions, err := GetEc2Regions(ctx, homeRegion)
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +237,9 @@ func GetDefaultVpcId(ctx context.Context, region string) (string, error) {
 	return aws.ToString(output.Vpcs[0].VpcId), nil
 }
 
-// GetVpcSubnetId returns the first subnet attached to a VPC.
-func GetVpcSubnetId(ctx context.Context, region string, vpcId string) (string, error) {
+// GetVpcSubnetId returns a subnet of a VPC that sits in an availability zone offering the instance type.
+// When the offerings cannot be read, the first subnet is returned and the launch decides.
+func GetVpcSubnetId(ctx context.Context, region string, vpcId string, instanceType string) (string, error) {
 	client, err := GetEc2Client(ctx, region)
 	if err != nil {
 		return "", err
@@ -247,7 +253,49 @@ func GetVpcSubnetId(ctx context.Context, region string, vpcId string) (string, e
 	if len(output.Subnets) == 0 {
 		return "", fmt.Errorf("no subnets in vpc %q", vpcId)
 	}
-	return aws.ToString(output.Subnets[0].SubnetId), nil
+	subnets := output.Subnets
+	sort.Slice(subnets, func(left int, right int) bool {
+		return aws.ToString(subnets[left].AvailabilityZone) < aws.ToString(subnets[right].AvailabilityZone)
+	})
+	zones, err := instanceTypeZones(ctx, client, instanceType)
+	if err != nil {
+		slog.Warn("could not read instance type offerings, using the first subnet", "region", region, "instance_type", instanceType, "error", err)
+		return aws.ToString(subnets[0].SubnetId), nil
+	}
+	subnetId, found := pickSubnet(subnets, zones)
+	if !found {
+		return "", fmt.Errorf("no subnet of vpc %q is in an availability zone that offers instance type %q in region %q", vpcId, instanceType, region)
+	}
+	return subnetId, nil
+}
+
+// instanceTypeZones returns the availability zones of the client's region that offer an instance type.
+func instanceTypeZones(ctx context.Context, client *ec2.Client, instanceType string) (map[string]bool, error) {
+	paginator := ec2.NewDescribeInstanceTypeOfferingsPaginator(client, &ec2.DescribeInstanceTypeOfferingsInput{
+		LocationType: types.LocationTypeAvailabilityZone,
+		Filters:      []types.Filter{{Name: aws.String("instance-type"), Values: []string{instanceType}}},
+	})
+	zones := map[string]bool{}
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describing offerings of instance type %q: %w", instanceType, err)
+		}
+		for _, offering := range page.InstanceTypeOfferings {
+			zones[aws.ToString(offering.Location)] = true
+		}
+	}
+	return zones, nil
+}
+
+// pickSubnet returns the first subnet whose availability zone is one of the given zones.
+func pickSubnet(subnets []types.Subnet, zones map[string]bool) (string, bool) {
+	for _, subnet := range subnets {
+		if zones[aws.ToString(subnet.AvailabilityZone)] {
+			return aws.ToString(subnet.SubnetId), true
+		}
+	}
+	return "", false
 }
 
 // GetAmiId returns the latest Amazon Linux 2023 AMI for an architecture in a region.
@@ -324,7 +372,16 @@ func CreateSecurityGroup(ctx context.Context, region string, vpcId string) (stri
 		return "", fmt.Errorf("describing security groups in vpc %q: %w", vpcId, err)
 	}
 	if len(queryOutput.SecurityGroups) > 0 {
-		return aws.ToString(queryOutput.SecurityGroups[0].GroupId), nil
+		existing := queryOutput.SecurityGroups[0]
+		securityGroupId := aws.ToString(existing.GroupId)
+		if AllowsSshIngress(existing.IpPermissions) {
+			return securityGroupId, nil
+		}
+		slog.Warn("ssh security group has no ssh rule, adding it", "security_group", securityGroupId, "vpc", vpcId)
+		if err := authorizeSshIngress(ctx, client, securityGroupId); err != nil {
+			return "", err
+		}
+		return securityGroupId, nil
 	}
 
 	buildOutput, err := client.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
@@ -339,23 +396,57 @@ func CreateSecurityGroup(ctx context.Context, region string, vpcId string) (stri
 		return "", fmt.Errorf("creating security group in vpc %q: %w", vpcId, err)
 	}
 	securityGroupId := aws.ToString(buildOutput.GroupId)
-	_, err = client.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
+	if err := authorizeSshIngress(ctx, client, securityGroupId); err != nil {
+		return "", err
+	}
+	return securityGroupId, nil
+}
+
+// AllowsSshIngress reports whether a set of ingress rules lets any IPv4 address reach the SSH port over TCP.
+func AllowsSshIngress(permissions []types.IpPermission) bool {
+	for _, permission := range permissions {
+		protocol := aws.ToString(permission.IpProtocol)
+		if protocol != tcpProtocol && protocol != allProtocols {
+			continue
+		}
+		coversPort := protocol == allProtocols ||
+			(aws.ToInt32(permission.FromPort) <= SshPort && aws.ToInt32(permission.ToPort) >= SshPort)
+		if !coversPort {
+			continue
+		}
+		for _, ipRange := range permission.IpRanges {
+			if aws.ToString(ipRange.CidrIp) == AnyIpv4Cidr {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// authorizeSshIngress opens the SSH port on a security group. A rule that already exists is not an error.
+func authorizeSshIngress(ctx context.Context, client *ec2.Client, securityGroupId string) error {
+	_, err := client.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId: aws.String(securityGroupId),
 		IpPermissions: []types.IpPermission{{
-			IpProtocol: aws.String("tcp"),
+			IpProtocol: aws.String(tcpProtocol),
 			FromPort:   aws.Int32(SshPort),
 			ToPort:     aws.Int32(SshPort),
 			IpRanges:   []types.IpRange{{CidrIp: aws.String(AnyIpv4Cidr)}},
 		}},
 	})
-	if err != nil {
-		return "", fmt.Errorf("authorizing ssh ingress on security group %q: %w", securityGroupId, err)
+	if err != nil && !hasErrorCode(err, DuplicatePermissionErrorCode) {
+		return fmt.Errorf("authorizing ssh ingress on security group %q: %w", securityGroupId, err)
 	}
-	return securityGroupId, nil
+	return nil
+}
+
+// hasErrorCode reports whether an error is an AWS API error with the given code.
+func hasErrorCode(err error, code string) bool {
+	var apiError smithy.APIError
+	return errors.As(err, &apiError) && apiError.ErrorCode() == code
 }
 
 // isDuplicateGroupError reports whether AWS rejected a security group because another caller just created it.
 func isDuplicateGroupError(err error) bool {
-	var apiError smithy.APIError
-	return errors.As(err, &apiError) && apiError.ErrorCode() == DuplicateGroupErrorCode
+	return hasErrorCode(err, DuplicateGroupErrorCode)
 }
