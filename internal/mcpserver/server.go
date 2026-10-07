@@ -130,10 +130,7 @@ func New(controller *control.Controller) *mcp.Server {
 		if err != nil {
 			return nil, control.CreateResult{}, err
 		}
-		if results[0].Error != "" {
-			return nil, control.CreateResult{}, fmt.Errorf("creating agent %q: %s", input.Name, results[0].Error)
-		}
-		return nil, results[0], nil
+		return createOutcome(input.Name, results[0])
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -209,6 +206,22 @@ func ServeStdio(ctx context.Context, server *mcp.Server) error {
 		return fmt.Errorf("serving mcp over stdio: %w", err)
 	}
 	return nil
+}
+
+// createOutcome turns one creation result into the tool's return values.
+// A failure that left the instance behind says so, because the instance keeps running until it is terminated.
+func createOutcome(name string, result control.CreateResult) (*mcp.CallToolResult, control.CreateResult, error) {
+	switch {
+	case result.Error == "":
+		return nil, result, nil
+	case result.InstanceId == "":
+		return nil, control.CreateResult{}, fmt.Errorf("creating agent %q: %s", name, result.Error)
+	default:
+		return nil, control.CreateResult{}, fmt.Errorf(
+			"creating agent %q: %s; instance %s was launched (state %s) and the agent still exists: poll get_agent until it is ready, or ask the user before terminating it",
+			name, result.Error, result.InstanceId, result.State,
+		)
+	}
 }
 
 // mustDetail adapts the two-value controller result to the handler's three values.
