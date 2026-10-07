@@ -16,7 +16,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const keepAliveRequestName = "keepalive@openssh.com"
+const (
+	keepAliveRequestName    = "keepalive@openssh.com"
+	defaultKeepAliveTimeout = 10 * time.Second
+)
 
 // CommandResponse is the captured result of one remote command.
 type CommandResponse struct {
@@ -72,11 +75,41 @@ func (sshHost *SshHost) createSshClientConfig() (*ssh.ClientConfig, error) {
 
 // IsConnectionAlive reports whether the current connection answers a keepalive request.
 func (sshHost *SshHost) IsConnectionAlive() bool {
-	if sshHost.connection == nil {
+	sshHost.connectionLock.Lock()
+	defer sshHost.connectionLock.Unlock()
+	return sshHost.answersKeepAlive(context.Background())
+}
+
+// keepAliveTimeout returns how long a keepalive may take before the connection counts as dead.
+func (sshHost *SshHost) keepAliveTimeout() time.Duration {
+	if sshHost.Timeout > 0 {
+		return sshHost.Timeout
+	}
+	return defaultKeepAliveTimeout
+}
+
+// answersKeepAlive reports whether the current connection answers a keepalive request before the timeout or the
+// context ends. The caller holds the connection lock.
+func (sshHost *SshHost) answersKeepAlive(ctx context.Context) bool {
+	connection := sshHost.connection
+	if connection == nil {
 		return false
 	}
-	_, _, err := sshHost.connection.SendRequest(keepAliveRequestName, true, nil)
-	return err == nil
+	answered := make(chan error, 1)
+	go func() {
+		_, _, err := connection.SendRequest(keepAliveRequestName, true, nil)
+		answered <- err
+	}()
+	timer := time.NewTimer(sshHost.keepAliveTimeout())
+	defer timer.Stop()
+	select {
+	case err := <-answered:
+		return err == nil
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // Connect opens the connection when it is not already alive.
@@ -86,28 +119,41 @@ func (sshHost *SshHost) Connect() error {
 
 // ConnectContext opens the connection when it is not already alive, honouring cancellation while dialing.
 func (sshHost *SshHost) ConnectContext(ctx context.Context) error {
+	_, err := sshHost.client(ctx)
+	return err
+}
+
+// client returns a live connection, replacing one that no longer answers.
+func (sshHost *SshHost) client(ctx context.Context) (*ssh.Client, error) {
 	sshHost.connectionLock.Lock()
 	defer sshHost.connectionLock.Unlock()
-	if sshHost.IsConnectionAlive() {
-		return nil
+	if sshHost.answersKeepAlive(ctx) {
+		return sshHost.connection, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("connecting to %s: %w", sshHost.Address(), err)
+	}
+	if sshHost.connection != nil {
+		_ = sshHost.connection.Close()
+		sshHost.connection = nil
 	}
 	sshClientConfig, err := sshHost.createSshClientConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dialer := net.Dialer{Timeout: sshHost.Timeout}
 	tcpConnection, err := dialer.DialContext(ctx, "tcp", sshHost.Address())
 	if err != nil {
-		return fmt.Errorf("dialing %s: %w", sshHost.Address(), err)
+		return nil, fmt.Errorf("dialing %s: %w", sshHost.Address(), err)
 	}
 	clientConnection, channels, requests, err := ssh.NewClientConn(tcpConnection, sshHost.Address(), sshClientConfig)
 	if err != nil {
 		tcpConnection.Close()
-		return fmt.Errorf("ssh handshake with %s@%s: %w", sshHost.User, sshHost.Address(), err)
+		return nil, fmt.Errorf("ssh handshake with %s@%s: %w", sshHost.User, sshHost.Address(), err)
 	}
 	sshHost.connection = ssh.NewClient(clientConnection, channels, requests)
 	slog.Info("connected to host", "user", sshHost.User, "address", sshHost.Address())
-	return nil
+	return sshHost.connection, nil
 }
 
 // Disconnect closes the connection when one is open.
@@ -132,10 +178,11 @@ func (sshHost *SshHost) RunCommand(command string) (CommandResponse, error) {
 
 // RunCommandContext runs one command, killing it when the context is cancelled.
 func (sshHost *SshHost) RunCommandContext(ctx context.Context, command string) (CommandResponse, error) {
-	if err := sshHost.ConnectContext(ctx); err != nil {
+	connection, err := sshHost.client(ctx)
+	if err != nil {
 		return CommandResponse{}, err
 	}
-	session, err := sshHost.connection.NewSession()
+	session, err := connection.NewSession()
 	if err != nil {
 		return CommandResponse{}, fmt.Errorf("opening session on %s: %w", sshHost.Address(), err)
 	}

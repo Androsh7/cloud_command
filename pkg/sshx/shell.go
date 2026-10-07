@@ -87,10 +87,11 @@ type Shell struct {
 // Standard error is routed through a tagging loop so its lines can be told apart from standard output,
 // and bash itself reports each command's exit code the moment the command finishes.
 func (sshHost *SshHost) OpenShell(ctx context.Context, rows int, columns int) (*Shell, error) {
-	if err := sshHost.ConnectContext(ctx); err != nil {
+	connection, err := sshHost.client(ctx)
+	if err != nil {
 		return nil, err
 	}
-	session, err := sshHost.connection.NewSession()
+	session, err := connection.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("opening shell session on %s: %w", sshHost.Address(), err)
 	}
