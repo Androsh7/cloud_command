@@ -28,6 +28,8 @@ const (
 	flagSudo         = "sudo"
 	flagLines        = "lines"
 	timestampLayout  = "2006-01-02 15:04:05"
+
+	plainShellCharacters = "_-./:=,+@%"
 )
 
 var errRefused = errors.New("refused")
@@ -221,11 +223,13 @@ func newJobsStartCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "start <agent> -- <script>",
 		Short: "Start a script as a persistent systemd job",
-		Args:  cobra.MinimumNArgs(2),
+		Long: "Start a script as a persistent systemd job. A single argument after -- is run as a script, so it may hold " +
+			"pipes and several commands. Several arguments are run as one command with exactly those arguments.",
+		Args: cobra.MinimumNArgs(2),
 		RunE: func(command *cobra.Command, args []string) error {
 			asJson, _ := command.Flags().GetBool(flagJson)
 			sudo, _ := command.Flags().GetBool(flagSudo)
-			script := strings.Join(args[1:], " ")
+			script := scriptFromArguments(args[1:])
 			return withApplication(command.Context(), func(ctx context.Context, app *application) error {
 				job, err := app.controller.StartJob(ctx, args[0], script, sudo)
 				if err != nil {
@@ -304,6 +308,34 @@ func newJobsRemoveCommand() *cobra.Command {
 			})
 		},
 	}
+}
+
+// scriptFromArguments turns command line arguments into a script: one argument is the script itself, several are one
+// command whose arguments are quoted so spaces and shell characters in them survive.
+func scriptFromArguments(arguments []string) string {
+	if len(arguments) == 1 {
+		return arguments[0]
+	}
+	quoted := make([]string, len(arguments))
+	for index, argument := range arguments {
+		quoted[index] = quoteShellArgument(argument)
+	}
+	return strings.Join(quoted, " ")
+}
+
+// quoteShellArgument returns an argument as one shell word, single-quoting it when it holds anything but plain characters.
+func quoteShellArgument(argument string) string {
+	if argument != "" && !strings.ContainsFunc(argument, needsShellQuoting) {
+		return argument
+	}
+	return "'" + strings.ReplaceAll(argument, "'", `'\''`) + "'"
+}
+
+// needsShellQuoting reports whether a character has to be quoted to stay literal in a shell word.
+func needsShellQuoting(character rune) bool {
+	isPlain := (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+		(character >= '0' && character <= '9') || strings.ContainsRune(plainShellCharacters, character)
+	return !isPlain
 }
 
 // printJson writes a value as indented JSON.
