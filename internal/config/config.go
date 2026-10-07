@@ -1,4 +1,4 @@
-// Package config resolves the ~/.cloud_command directory and loads the user settings stored in it.
+// Package config resolves the ~/.cloud-command directory and loads the user settings stored in it.
 package config
 
 import (
@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	RootDirectoryName   = ".cloud_command"
+	RootDirectoryName   = ".cloud-command"
 	SettingsFileName    = "settings.toml"
 	AgentsDirectoryName = "agents"
 	OutputDirectoryName = "output"
 	HistoryFileName     = "history.toml"
-	LogFileName         = "cloud_command.log"
+	LogFileName         = "cloud-command.log"
 
 	DefaultRegion               = "us-east-1"
 	DefaultInstanceType         = "t4g.nano"

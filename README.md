@@ -1,4 +1,4 @@
-# cloud_command
+# cloud-command
 
 A terminal interface for running work on disposable AWS EC2 agents. It creates agents (one or a batch), opens persistent bash shells on one or many of them over SSH, starts persistent commands as `systemd-run` units, and tears everything down again.
 
@@ -11,20 +11,19 @@ A terminal interface for running work on disposable AWS EC2 agents. It creates a
 ## Run
 
 ```bash
-make build
-./cloud_command
+make run
 ```
 
 `make build` stamps the version from `VERSION.txt` into the title, for example `Cloud Command v1.0.0`. `make build-dev` and `make run` show `Cloud Command DEVELOPMENT`.
 
-The first run writes `~/.cloud_command/settings.toml` with defaults and opens the agent list.
+The first run writes `~/.cloud-command/settings.toml` with defaults and opens the agent list.
 
-## Files under `~/.cloud_command`
+## Files under `~/.cloud-command`
 
 ```
 settings.toml                   user defaults (see below)
 history.toml                    every command and job ever sent, from the TUI, the CLI and the MCP server
-cloud_command.log               JSON log
+cloud-command.log               JSON log
 agents/<name>/agent.toml        agent record: ids, public ip, key file names, jobs
 agents/<name>/private_rsa.key   private key (0600)
 agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
@@ -62,17 +61,17 @@ agents/<name>/public_rsa.key    public key imported to EC2 as ssh-key-<uuid>
 
 `ctrl+c` quits from any screen.
 
-The agents screen also lists instances tagged `Type=cloud_command` that have no local record. They can be terminated with `t`.
+The agents screen also lists instances tagged `Type=cloud-command` that have no local record. They can be terminated with `t`.
 
 ## Shells
 
 `c` opens a persistent `/bin/bash` on each selected agent under a pseudo-terminal. Working directory, variables and exports survive between commands, and the shell stays open when you leave the screen. Stdout and stderr stream into the view as they arrive; when several hosts are open each line is prefixed with `[host]`. Every line you type is sent to every host shown; press `tab` to focus one host and the input, interrupt and view apply to that host alone. Stderr lines are shown in red and `ctrl+o` filters the view to stdout or stderr only. Each finished command adds an `[exit N]` line to the transcript (bash reports it through its prompt hook, so programs that read the terminal cannot swallow it), and the per-host status shows `running` or `idle (exit N)`. `ctrl+x` sends Ctrl-C to the foreground command on every host. If a shell exits (for example after `exit`), the next line you send reopens it.
 
-`ctrl+s` saves the transcripts under `~/.cloud_command/output/`: one host is saved as `<timestamp>-<agent>.txt`, several as a `<timestamp>/` directory with one `<agent>.txt` per host.
+`ctrl+s` saves the transcripts under `~/.cloud-command/output/`: one host is saved as `<timestamp>-<agent>.txt`, several as a `<timestamp>/` directory with one `<agent>.txt` per host.
 
 ## History
 
-Every shell line, `run_command` call and job start is recorded in `~/.cloud_command/history.toml` with its time, agent, source (`tui`, `cli` or `mcp`), sudo flag, full script, job id and exit code once known. The record outlives the agent. Press `h` on the agent list to browse it newest first and `enter` to read the full script of an entry. The job detail screen also shows a job's full script.
+Every shell line, `run_command` call and job start is recorded in `~/.cloud-command/history.toml` with its time, agent, source (`tui`, `cli` or `mcp`), sudo flag, full script, job id and exit code once known. The record outlives the agent. Press `h` on the agent list to browse it newest first and `enter` to read the full script of an entry. The job detail screen also shows a job's full script.
 
 ## Persistent jobs
 
@@ -83,35 +82,35 @@ A job runs as a transient unit named `job-<uuid>` with `RemainAfterExit=yes`, so
 Every operation the TUI offers for creating, listing and terminating agents and for jobs is also a subcommand, for scripts and CI. Add `--json` to get the raw result instead of a table.
 
 ```bash
-cloud_command agents list [--detached] [--json]
-cloud_command agents create <name> [--count N] [--region R] [--instance-type T] [--architecture arm64|x86_64] [--no-wait] [--json]
-cloud_command agents terminate <name>... --yes
-cloud_command jobs list <agent> [--json]
-cloud_command jobs start <agent> [--sudo] -- '<script>'
-cloud_command jobs status <agent> <job-id> [--lines N] [--json]
-cloud_command jobs stop <agent> <job-id>
-cloud_command jobs remove <agent> <job-id>
+cloud-command agents list [--detached] [--json]
+cloud-command agents create <name> [--count N] [--region R] [--instance-type T] [--architecture arm64|x86_64] [--no-wait] [--json]
+cloud-command agents terminate <name>... --yes
+cloud-command jobs list <agent> [--json]
+cloud-command jobs start <agent> [--sudo] -- '<script>'
+cloud-command jobs status <agent> <job-id> [--lines N] [--json]
+cloud-command jobs stop <agent> <job-id>
+cloud-command jobs remove <agent> <job-id>
 ```
 
 `agents create` waits until the agents accept SSH unless `--no-wait` is given, in which case it returns right after launch and `agents list` shows the state. `agents terminate` refuses to run without `--yes`. Job ids may be shortened to any unambiguous prefix. Errors go to stderr and the exit code is 1 when anything failed.
 
 ## MCP server
 
-`cloud_command mcp` serves the same operations to an MCP client over stdio. Claude Code picks it up from the `.mcp.json` in this repository; for another project or for Claude Desktop add:
+`cloud-command mcp` serves the same operations to an MCP client over stdio. Claude Code picks it up from the `.mcp.json` in this repository; for another project or for Claude Desktop add:
 
 ```json
 {
   "mcpServers": {
     "cloud-command": {
       "type": "stdio",
-      "command": "cloud_command",
+      "command": "cloud-command",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-`cloud_command` must be on `PATH`, or use the absolute path to the binary. The server reads settings and agents from `~/.cloud_command` like the TUI does, and its instructions tell the model to reuse agents, keep instances small and never terminate without permission.
+`cloud-command` must be on `PATH`, or use the absolute path to the binary. The server reads settings and agents from `~/.cloud-command` like the TUI does, and its instructions tell the model to reuse agents, keep instances small and never terminate without permission.
 
 | Tool | Purpose |
 | --- | --- |
@@ -125,7 +124,7 @@ cloud_command jobs remove <agent> <job-id>
 | `stop_job` | Stop a job, keeping its record |
 | `remove_job` | Stop a job, delete its output and forget it |
 
-In `mcp` mode stdout carries the protocol, so nothing else is written there; logs go to `~/.cloud_command/cloud_command.log`. The TUI, the command line and the MCP server may run at the same time against the same directory. Each operation reloads the agent record before changing it and writes it atomically, but two processes changing the same agent's jobs in the same instant can still lose one record.
+In `mcp` mode stdout carries the protocol, so nothing else is written there; logs go to `~/.cloud-command/cloud-command.log`. The TUI, the command line and the MCP server may run at the same time against the same directory. Each operation reloads the agent record before changing it and writes it atomically, but two processes changing the same agent's jobs in the same instant can still lose one record.
 
 ## Tests
 

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	AgentTypeTagValue             = "cloud_command"
+	AgentTypeTagValue             = "cloud-command"
 	SshSecurityGroupName          = "cloud-command-ssh-only"
 	SshSecurityGroupDescription   = "Allow ssh access (cloud command)"
 	SshPort                       = 22

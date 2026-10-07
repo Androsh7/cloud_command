@@ -32,6 +32,8 @@ type application struct {
 }
 
 func main() {
+	// Disable the error when opening the executable outside of a commandline
+	cobra.MousetrapHelpText = ""
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -41,7 +43,7 @@ func main() {
 // newRootCommand builds the command tree. Running with no subcommand opens the interface.
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "cloud_command",
+		Use:           "cloud-command",
 		Short:         "Manage disposable EC2 agents",
 		Version:       version.Version,
 		SilenceUsage:  true,

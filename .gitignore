@@ -2,9 +2,13 @@
 .vscode/
 
 # Go
-/cloud_command.exe
-/cloud_command
+/cloud-command.exe
+/cloud-command
 
 # Project
 *.log
 *~
+
+# Build output
+/dist/
+*.syso

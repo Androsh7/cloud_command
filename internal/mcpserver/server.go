@@ -15,7 +15,7 @@ import (
 const (
 	ServerName = "cloud-command"
 
-	instructions = `You manage short-lived AWS EC2 agents for the user through cloud_command.
+	instructions = `You manage short-lived AWS EC2 agents for the user through cloud-command.
 
 Rules:
 1. Start by listing existing agents and reuse them whenever possible.
