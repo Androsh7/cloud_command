@@ -330,6 +330,9 @@ func (controller *Controller) CreateAgents(ctx context.Context, request CreateRe
 				created, createErr = agent.Launch(ctx, controller.Store, agentSpec, options, nil)
 			}
 			results[index] = describeCreate(ctx, name, created, createErr)
+			if created != nil {
+				_ = created.Disconnect()
+			}
 		}(index, name)
 	}
 	waitGroup.Wait()
@@ -439,6 +442,9 @@ func (controller *Controller) StartJob(ctx context.Context, name string, script 
 
 // findJob returns the stored job with an id, accepting the full id or an unambiguous prefix.
 func findJob(loaded *agent.Agent, jobId string) (agent.Job, error) {
+	if jobId == "" {
+		return agent.Job{}, fmt.Errorf("%w: job id is required", ErrInvalidRequest)
+	}
 	matches := []agent.Job{}
 	for _, job := range loaded.Record.Jobs {
 		if job.Id == jobId {

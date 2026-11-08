@@ -148,6 +148,7 @@ func (model Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if message.String() == "ctrl+c" {
 			model.closeAllShells()
+			model.disconnectAgents()
 			return model, tea.Quit
 		}
 		return model.handleKey(message)

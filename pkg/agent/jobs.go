@@ -14,6 +14,8 @@ import (
 	"github.com/androsh7/cloud_command/pkg/systemd"
 )
 
+const unrecordedJobCleanupTimeout = 15 * time.Second
+
 var ErrJobNotFound = errors.New("job not found")
 
 // jobSpec converts a stored job back into the systemd spec that describes it.
@@ -52,6 +54,9 @@ func (managedAgent *Agent) StartJob(ctx context.Context, command sshx.Command) (
 
 	response, err := managedAgent.runRaw(ctx, spec.RunCommand())
 	if err != nil {
+		if ctx.Err() != nil {
+			managedAgent.discardUnrecordedJob(ctx, spec)
+		}
 		return Job{}, err
 	}
 	if response.ReturnCode != 0 {
@@ -67,6 +72,21 @@ func (managedAgent *Agent) StartJob(ctx context.Context, command sshx.Command) (
 	}
 	slog.Info("started job", "agent", managedAgent.Name(), "job", job.Id, "unit", spec.UnitName())
 	return job, nil
+}
+
+// discardUnrecordedJob stops and cleans up the unit a cancelled start may have created before it was recorded,
+// so no job runs on the agent that the record does not know about. It works on a fresh deadline because the
+// caller's context is already cancelled.
+func (managedAgent *Agent) discardUnrecordedJob(ctx context.Context, spec systemd.JobSpec) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), unrecordedJobCleanupTimeout)
+	defer cancel()
+	if _, err := managedAgent.runRaw(cleanupCtx, systemd.StopCommand(spec.UnitName())); err != nil {
+		slog.Warn("could not stop job after cancelled start", "agent", managedAgent.Name(), "job", spec.Id, "error", err)
+		return
+	}
+	if _, err := managedAgent.runRaw(cleanupCtx, systemd.CleanupCommand(spec)); err != nil {
+		slog.Warn("could not clean up job after cancelled start", "agent", managedAgent.Name(), "job", spec.Id, "error", err)
+	}
 }
 
 // JobStatus returns the systemd state of one job.

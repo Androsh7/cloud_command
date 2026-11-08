@@ -87,6 +87,20 @@ func TestMayHoldMarkerPrefixDetectsPartialMarker(t *testing.T) {
 	}
 }
 
+func TestConsumeKeepsCharacterSplitAcrossChunks(t *testing.T) {
+	shell := &Shell{events: make(chan ShellEvent, 8), lastSequence: setupSequence}
+	var partial strings.Builder
+	encoded := []byte("café\n")
+
+	incompleteRune := shell.consume(encoded[:4], &partial)
+	shell.consume(append(incompleteRune, encoded[4:]...), &partial)
+
+	line := <-shell.events
+	if line.Text != "café" || len(incompleteRune) != 1 {
+		t.Fatalf("got %q with carry %v", line.Text, incompleteRune)
+	}
+}
+
 func TestConsumeSplitsOnCarriageReturnAndStripsTags(t *testing.T) {
 	shell := &Shell{events: make(chan ShellEvent, 8), lastSequence: setupSequence}
 	var partial strings.Builder

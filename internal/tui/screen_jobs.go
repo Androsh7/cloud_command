@@ -315,11 +315,11 @@ func (model Model) viewJobDetail() string {
 		builder.WriteString(line)
 		builder.WriteString("\n")
 	}
-	stream := "stdout"
+	stream, path := "stdout", state.job.StdoutPath
 	if state.showStderr {
-		stream = "stderr"
+		stream, path = "stderr", state.job.StderrPath
 	}
-	builder.WriteString(dimStyle.Render(fmt.Sprintf("-- %s (%s) --", stream, state.job.StdoutPath)))
+	builder.WriteString(dimStyle.Render(fmt.Sprintf("-- %s (%s) --", stream, path)))
 	builder.WriteString("\n")
 	builder.WriteString(state.viewport.View())
 	builder.WriteString("\n")

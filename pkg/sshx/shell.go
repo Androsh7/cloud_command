@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -202,6 +203,7 @@ func (shell *Shell) readLoop(reader io.Reader) {
 	}()
 
 	var partial strings.Builder
+	var incompleteRune []byte
 	partialIdle := false
 	ticker := time.NewTicker(idleFlushInterval)
 	defer ticker.Stop()
@@ -213,7 +215,7 @@ func (shell *Shell) readLoop(reader io.Reader) {
 				break
 			}
 			partialIdle = false
-			shell.consume(chunk, &partial)
+			incompleteRune = shell.consume(append(incompleteRune, chunk...), &partial)
 		case now := <-ticker.C:
 			if partial.Len() > 0 && partialIdle && !mayHoldMarkerPrefix(partial.String()) {
 				shell.handleLine(partial.String())
@@ -223,6 +225,7 @@ func (shell *Shell) readLoop(reader io.Reader) {
 			shell.expirePending(now)
 		}
 	}
+	partial.Write(incompleteRune)
 	if partial.Len() > 0 {
 		shell.handleLine(partial.String())
 	}
@@ -239,8 +242,11 @@ func (shell *Shell) readLoop(reader io.Reader) {
 }
 
 // consume splits a chunk into lines, handling every complete one and keeping the remainder.
-func (shell *Shell) consume(chunk []byte, partial *strings.Builder) {
-	for _, char := range string(chunk) {
+// It returns the trailing bytes of a multibyte character cut off by the chunk boundary, for the caller to
+// prepend to the next chunk.
+func (shell *Shell) consume(chunk []byte, partial *strings.Builder) []byte {
+	complete, incompleteRune := splitIncompleteRune(chunk)
+	for _, char := range string(complete) {
 		if char == '\n' || char == '\r' {
 			if partial.Len() > 0 {
 				shell.handleLine(partial.String())
@@ -254,6 +260,22 @@ func (shell *Shell) consume(chunk []byte, partial *strings.Builder) {
 			partial.Reset()
 		}
 	}
+	return incompleteRune
+}
+
+// splitIncompleteRune separates the bytes that decode cleanly from a trailing multibyte character that has not
+// fully arrived yet. Bytes that can never complete a character stay in the first part.
+func splitIncompleteRune(chunk []byte) ([]byte, []byte) {
+	for start := len(chunk) - 1; start >= 0 && start >= len(chunk)-utf8.UTFMax+1; start-- {
+		if !utf8.RuneStart(chunk[start]) {
+			continue
+		}
+		if utf8.FullRune(chunk[start:]) {
+			return chunk, nil
+		}
+		return chunk[:start], chunk[start:]
+	}
+	return chunk, nil
 }
 
 // mayHoldMarkerPrefix reports whether the end of a partial line could be the start of a marker still arriving.

@@ -118,6 +118,16 @@ func TestFindJobRejectsAmbiguousPrefix(t *testing.T) {
 	}
 }
 
+func TestFindJobRejectsEmptyId(t *testing.T) {
+	stored := &agent.Agent{Record: agent.Record{Name: "alpha", Jobs: []agent.Job{{Id: "abc-1"}}}}
+
+	_, err := findJob(stored, "")
+
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("got %v, want ErrInvalidRequest", err)
+	}
+}
+
 func TestTailLinesKeepsLastLines(t *testing.T) {
 	tail := TailLines("one\ntwo\nthree\n", 2)
 

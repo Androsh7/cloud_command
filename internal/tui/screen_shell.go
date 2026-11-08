@@ -503,6 +503,7 @@ func (model Model) applyShellOpened(message shellOpenedMsg) (tea.Model, tea.Cmd)
 	host.opening = false
 	if message.err != nil {
 		host.err = message.err
+		host.queue = nil
 		if model.isShellTarget(message.agentName) {
 			model.setStatus(fmt.Errorf("%s: %w", message.agentName, message.err))
 		}

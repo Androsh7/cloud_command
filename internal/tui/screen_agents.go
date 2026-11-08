@@ -99,6 +99,8 @@ func (model Model) updateAgentsKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	state := &model.agents
 	switch message.String() {
 	case "q":
+		model.closeAllShells()
+		model.disconnectAgents()
 		return model, tea.Quit
 	case "up", "k":
 		if state.cursor > 0 {
@@ -190,7 +192,7 @@ func (model Model) applyAgentsLoaded(message agentsLoadedMsg) (tea.Model, tea.Cm
 		model.setStatus(message.err)
 		return model, nextPoll
 	}
-	model.agents.agents = message.agents
+	model.agents.agents = model.adoptAgents(message.agents)
 	model.agents.infos = message.infos
 	known := map[string]bool{}
 	for _, storedAgent := range message.agents {
@@ -210,6 +212,37 @@ func (model Model) applyAgentsLoaded(message agentsLoadedMsg) (tea.Model, tea.Cm
 		}
 	}
 	return model, nextPoll
+}
+
+// adoptAgents copies freshly loaded records onto the agent objects already held, so open SSH connections and
+// shells keep working, and disconnects the agents that no longer exist. It returns the list in the loaded order.
+func (model *Model) adoptAgents(loaded []*agent.Agent) []*agent.Agent {
+	previous := make(map[string]*agent.Agent, len(model.agents.agents))
+	for _, known := range model.agents.agents {
+		previous[known.Name()] = known
+	}
+	adopted := make([]*agent.Agent, 0, len(loaded))
+	for _, fresh := range loaded {
+		known, found := previous[fresh.Name()]
+		if !found {
+			adopted = append(adopted, fresh)
+			continue
+		}
+		known.Record = fresh.Record
+		adopted = append(adopted, known)
+		delete(previous, fresh.Name())
+	}
+	for _, gone := range previous {
+		_ = gone.Disconnect()
+	}
+	return adopted
+}
+
+// disconnectAgents closes every SSH connection the interface holds.
+func (model *Model) disconnectAgents() {
+	for _, known := range model.agents.agents {
+		_ = known.Disconnect()
+	}
 }
 
 // scheduleAgentsPoll arranges the next automatic state check and invalidates any earlier one.
