@@ -1,8 +1,11 @@
 {
-    "mcpServers": {
-        "cloud-command": {
-            "type": "http",
-            "url": "https://127.0.0.1:8080/api/mcp/"
-        }
+  "mcpServers": {
+    "cloud-command": {
+      "type": "stdio",
+      "command": "cloud-command",
+      "args": [
+        "mcp"
+      ]
     }
+  }
 }

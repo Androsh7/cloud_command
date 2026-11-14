@@ -1,0 +1,11 @@
+name: cloud-command
+arch: amd64
+platform: linux
+version: ${VERSION}
+maintainer: Androsh7
+description: Cloud Command
+homepage: https://github.com/androsh7/cloud_command
+license: MIT
+contents:
+  - src: dist/linux/cloud-command
+    dst: /usr/bin/cloud-command

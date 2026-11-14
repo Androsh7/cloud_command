@@ -1,0 +1,141 @@
+# On every push to main (i.e. a merged PR), read VERSION.txt and, if a tag
+# for that version doesn't already exist, build every artifact, create an
+# annotated tag and a GitHub Release whose notes are pulled from the matching
+# CHANGELOG.md section, and attach the artifacts to the Release.
+#
+# Assumptions:
+#   - VERSION.txt contains a bare semver string, e.g. "1.4.2"
+#   - CHANGELOG.md uses "## [1.4.2]" or "## 1.4.2" style headings
+#   - Tags are prefixed with "v" (change TAG_PREFIX below if not)
+
+name: Tag on merge to main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION.txt
+      - CHANGELOG.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tag-on-merge
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check whether the version needs a tag
+    runs-on: ubuntu-latest
+    env:
+      TAG_PREFIX: v
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION.txt)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::VERSION.txt does not contain a valid semver string: '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG_PREFIX}${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether tag already exists
+        id: check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists — nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build
+    needs: check
+    if: needs.check.outputs.exists == 'false'
+    uses: ./.github/workflows/build.yaml
+
+  release:
+    name: Tag and release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      TAG: ${{ needs.check.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: cloud-command-linux
+          path: artifacts/linux
+
+      - name: Download the Windows artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: cloud-command-windows
+          path: artifacts/windows
+
+      - name: Collect the release files
+        run: |
+          mkdir release
+          # Artifacts drop the executable bit, so restore it and ship the bare binary in a tarball
+          chmod +x artifacts/linux/cloud-command
+          tar -C artifacts/linux -czf "release/cloud-command-${VERSION}-linux-amd64.tar.gz" cloud-command
+          rm artifacts/linux/cloud-command
+          mv artifacts/windows/cloud-command.exe "release/cloud-command-${VERSION}-windows-amd64.exe"
+          mv artifacts/linux/* artifacts/windows/* release/
+          ls -l release
+
+      - name: Extract changelog section
+        run: |
+          # Grab everything between the heading for this version and the next "## " heading.
+          awk -v ver="$VERSION" '
+            /^## / {
+              if (found) exit
+              if (index($0, "[" ver "]") || $0 ~ ("^## " ver "([^0-9.]|$)")) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
+          if [[ ! -s release-notes.md ]]; then
+            echo "::warning::No CHANGELOG.md section found for $VERSION; using a default message."
+            echo "Release $VERSION" > release-notes.md
+          fi
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          {
+            echo "Release $TAG"
+            echo
+            cat release-notes.md
+          } > tag-message.txt
+          git tag -a "$TAG" --cleanup=verbatim -F tag-message.txt
+          git push origin "refs/tags/$TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.check.outputs.tag }}
+          name: ${{ needs.check.outputs.tag }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(needs.check.outputs.version, '-') }}
+          fail_on_unmatched_files: true
+          files: release/*

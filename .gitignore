@@ -1,19 +1,14 @@
 # VS Code
-.vscode
+.vscode/
 
-# Python
-.venv/
-build/
-__pycache__/
-*.egg-info
+# Go
+/cloud-command.exe
+/cloud-command
 
-# Nuitka
-*.bin
-*.exe
-*.dist/
-*.build/
+# Project
+*.log
+*~
 
-# Project files
-agents/
-*.crt
-*.key
+# Build output
+/dist/
+*.syso

@@ -1,0 +1,103 @@
+# .github/workflows/version-check.yml
+#
+# Runs on pull requests targeting main and fails if:
+#   - VERSION.txt is unchanged or not a valid semver
+#   - the new version isn't greater than the one on main
+#   - the tag for the new version already exists
+#   - CHANGELOG.md has no "## [x.y.z]" / "## x.y.z" section for the new version
+#
+# Add the "skip-version-check" label to a PR (docs-only, CI tweaks, etc.)
+# to bypass the check.
+
+name: Version & changelog check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-version-check') }}
+    env:
+      TAG_PREFIX: v
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read versions
+        id: versions
+        run: |
+          set -euo pipefail
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          NEW="$(tr -d '[:space:]' < VERSION.txt)"
+          OLD="$(git show "$BASE:VERSION.txt" 2>/dev/null | tr -d '[:space:]' || echo "0.0.0")"
+
+          echo "Base version: $OLD"
+          echo "PR version:   $NEW"
+          echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Validate semver
+        run: |
+          NEW="${{ steps.versions.outputs.new }}"
+          if [[ ! "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error file=VERSION.txt::'$NEW' is not a valid semver string"
+            exit 1
+          fi
+
+      - name: Ensure version was bumped
+        run: |
+          OLD="${{ steps.versions.outputs.old }}"
+          NEW="${{ steps.versions.outputs.new }}"
+          if [[ "$OLD" == "$NEW" ]]; then
+            echo "::error file=VERSION.txt::VERSION.txt was not bumped (still $NEW). Bump it or add the 'skip-version-check' label."
+            exit 1
+          fi
+          # `sort -V` handles semver ordering well enough for MAJOR.MINOR.PATCH;
+          # pre-release suffixes are treated loosely.
+          HIGHEST="$(printf '%s\n%s\n' "$OLD" "$NEW" | sort -V | tail -n1)"
+          if [[ "$HIGHEST" != "$NEW" ]]; then
+            echo "::error file=VERSION.txt::New version $NEW is not greater than base version $OLD"
+            exit 1
+          fi
+
+      - name: Ensure tag does not already exist
+        run: |
+          TAG="${TAG_PREFIX}${{ steps.versions.outputs.new }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error file=VERSION.txt::Tag $TAG already exists on origin"
+            exit 1
+          fi
+
+      - name: Ensure CHANGELOG.md has a section for the new version
+        run: |
+          NEW="${{ steps.versions.outputs.new }}"
+          if ! grep -Eq "^## (\[$NEW\]|$NEW([^0-9.]|$))" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::No '## [$NEW]' section found in CHANGELOG.md"
+            exit 1
+          fi
+          # Section must have at least one non-blank line of content.
+          BODY="$(awk -v ver="$NEW" '
+            /^## / { if (found) exit; if (index($0,"["ver"]") || $0 ~ ("^## " ver "([^0-9.]|$)")) { found=1; next } }
+            found && NF { print }
+          ' CHANGELOG.md)"
+          if [[ -z "$BODY" ]]; then
+            echo "::error file=CHANGELOG.md::The '## [$NEW]' section is empty"
+            exit 1
+          fi
+
+      - name: Ensure CHANGELOG.md was actually modified in this PR
+        run: |
+          if git diff --quiet "origin/${{ github.base_ref }}...HEAD" -- CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::CHANGELOG.md was not modified in this PR"
+            exit 1
+          fi
