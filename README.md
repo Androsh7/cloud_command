@@ -6,7 +6,6 @@ A terminal interface for running work on disposable AWS EC2 agents. It creates a
 
 - Go 1.27 or newer.
 - AWS credentials available to the default SDK credential chain (`~/.aws/credentials`, `AWS_PROFILE`, environment variables or SSO).
-- Agents run Amazon Linux 2023, which provides `systemd-run` for persistent jobs.
 
 ## Run
 
